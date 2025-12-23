@@ -1,0 +1,343 @@
+const request = require('supertest');
+const app = require('../server');
+
+describe('Express.js Backend API Tests', () => {
+  
+  describe('Health Check', () => {
+    it('should return server status', async () => {
+      const response = await request(app)
+        .get('/health')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('message', 'Server is running');
+      expect(response.body).toHaveProperty('environment');
+    });
+  });
+
+  describe('Authentication Endpoints', () => {
+    describe('POST /api/auth/register', () => {
+      it('should register a new user', async () => {
+        const userData = {
+          username: 'testuser',
+          email: 'test@example.com',
+          password: 'password123',
+          role: 'student',
+          firstName: 'Test',
+          lastName: 'User'
+        };
+
+        const response = await request(app)
+          .post('/api/auth/register')
+          .send(userData)
+          .expect(201);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('message');
+        expect(response.body.data).toHaveProperty('user');
+      });
+    });
+
+    describe('POST /api/auth/login', () => {
+      it('should login a user', async () => {
+        const loginData = {
+          email: 'test@example.com',
+          password: 'password123'
+        };
+
+        const response = await request(app)
+          .post('/api/auth/login')
+          .send(loginData)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('message');
+        expect(response.body.data).toHaveProperty('accessToken');
+        expect(response.body.data).toHaveProperty('refreshToken');
+      });
+    });
+  });
+
+  describe('User Management Endpoints', () => {
+    let authToken;
+
+    beforeEach(async () => {
+      // Get auth token for protected routes
+      const loginResponse = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'admin@example.com',
+          password: 'admin123'
+        });
+      
+      authToken = loginResponse.body.data?.accessToken;
+    });
+
+    describe('GET /api/users', () => {
+      it('should get all users (admin only)', async () => {
+        const response = await request(app)
+          .get('/api/users')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+
+    describe('GET /api/students', () => {
+      it('should get all students', async () => {
+        const response = await request(app)
+          .get('/api/students')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+
+    describe('GET /api/tutors', () => {
+      it('should get all tutors', async () => {
+        const response = await request(app)
+          .get('/api/tutors')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+  });
+
+  describe('Academic Endpoints', () => {
+    let authToken;
+
+    beforeEach(async () => {
+      const loginResponse = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'tutor@example.com',
+          password: 'tutor123'
+        });
+      
+      authToken = loginResponse.body.data?.accessToken;
+    });
+
+    describe('GET /api/academics/courses', () => {
+      it('should get all courses', async () => {
+        const response = await request(app)
+          .get('/api/academics/courses')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+
+    describe('GET /api/academics/assignments', () => {
+      it('should get all assignments', async () => {
+        const response = await request(app)
+          .get('/api/academics/assignments')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+  });
+
+  describe('Communication Endpoints', () => {
+    describe('GET /api/communication/news', () => {
+      it('should get all news', async () => {
+        const response = await request(app)
+          .get('/api/communication/news')
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+
+    describe('GET /api/communication/events', () => {
+      it('should get all events', async () => {
+        const response = await request(app)
+          .get('/api/communication/events')
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+
+    describe('GET /api/communication/books', () => {
+      it('should get all books', async () => {
+        const response = await request(app)
+          .get('/api/communication/books')
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+  });
+
+  describe('Search Endpoints', () => {
+    let authToken;
+
+    beforeEach(async () => {
+      const loginResponse = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'student@example.com',
+          password: 'student123'
+        });
+      
+      authToken = loginResponse.body.data?.accessToken;
+    });
+
+    describe('GET /api/search/global', () => {
+      it('should perform global search', async () => {
+        const response = await request(app)
+          .get('/api/search/global?q=test')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(response.body.data).toHaveProperty('users');
+        expect(response.body.data).toHaveProperty('courses');
+        expect(response.body.data).toHaveProperty('news');
+      });
+    });
+
+    describe('GET /api/search/quick', () => {
+      it('should perform quick search', async () => {
+        const response = await request(app)
+          .get('/api/search/quick?q=math')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+    });
+  });
+
+  describe('Error Handling', () => {
+    describe('Invalid Endpoints', () => {
+      it('should return 404 for invalid endpoints', async () => {
+        const response = await request(app)
+          .get('/api/invalid-endpoint')
+          .expect(404);
+
+        expect(response.body).toHaveProperty('success', false);
+        expect(response.body).toHaveProperty('message');
+      });
+    });
+
+    describe('Authentication Errors', () => {
+      it('should return 401 for unauthorized access', async () => {
+        const response = await request(app)
+          .get('/api/users')
+          .expect(401);
+
+        expect(response.body).toHaveProperty('success', false);
+        expect(response.body).toHaveProperty('message');
+      });
+    });
+  });
+
+  describe('Input Validation', () => {
+    describe('Invalid Registration Data', () => {
+      it('should validate required fields', async () => {
+        const invalidData = {
+          email: 'invalid-email',
+          // missing other required fields
+        };
+
+        const response = await request(app)
+          .post('/api/auth/register')
+          .send(invalidData)
+          .expect(400);
+
+        expect(response.body).toHaveProperty('success', false);
+        expect(response.body).toHaveProperty('message');
+        expect(response.body).toHaveProperty('errors');
+      });
+    });
+
+    describe('Invalid Login Data', () => {
+      it('should validate email format', async () => {
+        const invalidData = {
+          email: 'invalid-email',
+          password: 'password123'
+        };
+
+        const response = await request(app)
+          .post('/api/auth/login')
+          .send(invalidData)
+          .expect(400);
+
+        expect(response.body).toHaveProperty('success', false);
+        expect(response.body).toHaveProperty('message');
+      });
+    });
+  });
+
+  describe('Rate Limiting', () => {
+    it('should enforce rate limits', async () => {
+      const promises = [];
+      
+      // Make multiple rapid requests
+      for (let i = 0; i < 101; i++) {
+        promises.push(
+          request(app)
+            .get('/health')
+            .then(res => res.status)
+        );
+      }
+
+      const results = await Promise.all(promises);
+      const rateLimitedResponses = results.filter(status => status === 429);
+      
+      expect(rateLimitedResponses.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('CORS Headers', () => {
+    it('should include CORS headers', async () => {
+      const response = await request(app)
+        .get('/health')
+        .expect(200);
+
+      expect(response.headers).toHaveProperty('access-control-allow-origin');
+      expect(response.headers).toHaveProperty('access-control-allow-methods');
+      expect(response.headers).toHaveProperty('access-control-allow-headers');
+    });
+  });
+
+  describe('Security Headers', () => {
+    it('should include security headers', async () => {
+      const response = await request(app)
+        .get('/health')
+        .expect(200);
+
+      expect(response.headers).toHaveProperty('x-content-type-options');
+      expect(response.headers).toHaveProperty('x-frame-options');
+      expect(response.headers).toHaveProperty('x-xss-protection');
+    });
+  });
+});
+
