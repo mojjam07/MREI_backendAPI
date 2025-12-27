@@ -30,8 +30,8 @@ const validateRegister = [
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Password must contain at least one lowercase letter, one uppercase letter, and one number'),
   body('role')
-    .isIn(['student', 'tutor', 'admin'])
-    .withMessage('Role must be student, tutor, or admin'),
+    .isIn(['student', 'tutor', 'admin', 'alumni'])
+    .withMessage('Role must be student, tutor, admin, or alumni'),
   body('first_name')
     .notEmpty()
     .withMessage('First name is required')

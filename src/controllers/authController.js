@@ -48,6 +48,22 @@ const register = async (req, res) => {
         'INSERT INTO tutor_profiles (user_id, tutor_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())',
         [newUser.rows[0].id, tutorId]
       );
+    } else if (role === 'alumni') {
+      // Alumni profiles are automatically created by database triggers
+      // But let's ensure the profile exists and get the alumni_id
+      const alumniProfile = await pool.query(
+        'SELECT alumni_id FROM alumni_profiles WHERE user_id = $1',
+        [newUser.rows[0].id]
+      );
+      
+      if (alumniProfile.rows.length === 0) {
+        // Fallback: create alumni profile manually if trigger didn't work
+        const alumniId = `ALU${Date.now()}`;
+        await pool.query(
+          'INSERT INTO alumni_profiles (user_id, alumni_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())',
+          [newUser.rows[0].id, alumniId]
+        );
+      }
     }
 
     // Generate tokens
@@ -83,10 +99,12 @@ const login = async (req, res) => {
     const userQuery = `
       SELECT u.*, 
         sp.student_id as student_profile_id,
-        tp.tutor_id as tutor_profile_id
+        tp.tutor_id as tutor_profile_id,
+        ap.alumni_id as alumni_profile_id
       FROM users u
       LEFT JOIN student_profiles sp ON u.id = sp.user_id
       LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
+      LEFT JOIN alumni_profiles ap ON u.id = ap.user_id
       WHERE u.email = $1
     `;
     
@@ -203,10 +221,12 @@ const getCurrentUser = async (req, res) => {
       SELECT u.id, u.username, u.email, u.role, u.first_name, u.last_name, 
              u.created_at, u.updated_at, u.last_login,
              sp.student_id as student_profile_id,
-             tp.tutor_id as tutor_profile_id
+             tp.tutor_id as tutor_profile_id,
+             ap.alumni_id as alumni_profile_id
       FROM users u
       LEFT JOIN student_profiles sp ON u.id = sp.user_id
       LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
+      LEFT JOIN alumni_profiles ap ON u.id = ap.user_id
       WHERE u.id = $1
     `;
     

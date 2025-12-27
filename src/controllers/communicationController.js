@@ -146,8 +146,8 @@ const getNewsById = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Get news by ID error:', error(500).json);
-    res.status({
+    console.error('Get news by ID error:', error);
+    res.status(500).json({
       success: false,
       message: 'Server error'
     });
