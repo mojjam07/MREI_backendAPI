@@ -293,15 +293,64 @@ The API uses standardized error responses:
 
 ## 🚀 Deployment
 
+### Render Deployment (Recommended)
+
+1. **Create Render Account & PostgreSQL Database**
+   - Sign up at [render.com](https://render.com)
+   - Create a new PostgreSQL database instance
+   - Note the database credentials (host, port, database name, username, password)
+
+2. **Deploy the API**
+   - Connect your GitHub repository to Render
+   - Create a new Web Service
+   - Configure the following settings:
+     - **Runtime**: Node.js
+     - **Build Command**: `npm install`
+     - **Start Command**: `npm start`
+     - **Environment Variables**:
+       ```
+       NODE_ENV=production
+       PORT=10000
+       DB_HOST=<your-render-postgres-host>
+       DB_PORT=<your-render-postgres-port>
+       DB_NAME=<your-render-postgres-database>
+       DB_USER=<your-render-postgres-user>
+       DB_PASSWORD=<your-render-postgres-password>
+       JWT_SECRET=<strong-random-secret>
+       JWT_REFRESH_SECRET=<strong-random-refresh-secret>
+       FRONTEND_URL=<your-frontend-url>
+       ```
+
+3. **Database Setup**
+   - The `postinstall` script will automatically run migrations and seed data on first deployment
+   - For subsequent deployments, database changes are handled automatically
+
+4. **Custom Domain (Optional)**
+   - Add your custom domain in Render dashboard
+   - Update CORS settings with your production domain
+
+### Alternative Deployment Options
+
+#### Docker Deployment
+```bash
+# Build and run with Docker
+docker build -t school-api .
+docker run -p 8000:8000 --env-file .env school-api
+```
+
+#### PM2 Deployment
+```bash
+npm install -g pm2
+pm2 start server.js --name "school-api"
+pm2 startup
+pm2 save
+```
+
+#### Manual Deployment
 1. Set production environment variables
-2. Use a process manager like PM2:
-   ```bash
-   npm install -g pm2
-   pm2 start server.js --name "school-api"
-   ```
-3. Configure reverse proxy (nginx/Apache)
-4. Set up SSL certificates
-5. Configure database backups
+2. Configure reverse proxy (nginx/Apache)
+3. Set up SSL certificates
+4. Configure database backups
 
 ## 🤝 Contributing
 
