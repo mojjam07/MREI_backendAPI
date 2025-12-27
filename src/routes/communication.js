@@ -3,6 +3,7 @@ const router = express.Router();
 
 // Import controllers
 const {
+  getCommunicationOverview,
   getStatistics,
   getNews,
   getNewsById,
@@ -29,6 +30,11 @@ const { getPlaceholder } = require('../controllers/placeholderController');
 // Import middleware
 const { validateNews, validateEvent, validateTestimonial, validateContact, validateId, validatePagination } = require('../middleware/validation');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
+
+// @desc    Get communication overview
+// @route   GET /api/communication
+// @access  Public
+router.get('/', getCommunicationOverview);
 
 // @desc    Get all statistics
 // @route   GET /api/communication/statistics

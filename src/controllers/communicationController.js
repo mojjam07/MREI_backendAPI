@@ -1,5 +1,83 @@
 const { pool } = require('../config/database');
 
+// @desc    Get communication overview
+// @route   GET /api/communication
+// @access  Public
+const getCommunicationOverview = async (req, res) => {
+  try {
+    // Get overview statistics and counts
+    const overviewQuery = `
+      SELECT 
+        (SELECT COUNT(*) FROM news WHERE published = true) as total_news,
+        (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE) as upcoming_events,
+        (SELECT COUNT(*) FROM testimonials WHERE approved = true) as approved_testimonials,
+        (SELECT COUNT(*) FROM campus_life) as campus_life_content,
+        (SELECT COUNT(*) FROM books WHERE available = true) as available_books,
+        (SELECT COUNT(*) FROM contact_messages WHERE status = 'new') as new_messages
+    `;
+    
+    const overview = await pool.query(overviewQuery);
+
+    // Get recent items for preview
+    const recentNewsQuery = `
+      SELECT id, title, created_at 
+      FROM news 
+      WHERE published = true 
+      ORDER BY created_at DESC 
+      LIMIT 3
+    `;
+    
+    const upcomingEventsQuery = `
+      SELECT id, title, event_date, location 
+      FROM events 
+      WHERE event_date >= CURRENT_DATE 
+      ORDER BY event_date ASC 
+      LIMIT 3
+    `;
+    
+    const topTestimonialsQuery = `
+      SELECT id, student_name, content, rating 
+      FROM testimonials 
+      WHERE approved = true 
+      ORDER BY rating DESC, created_at DESC 
+      LIMIT 2
+    `;
+
+    const [newsResult, eventsResult, testimonialsResult] = await Promise.all([
+      pool.query(recentNewsQuery),
+      pool.query(upcomingEventsQuery),
+      pool.query(topTestimonialsQuery)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        overview: overview.rows[0],
+        recent_news: newsResult.rows,
+        upcoming_events: eventsResult.rows,
+        featured_testimonials: testimonialsResult.rows,
+        resources: {
+          news: '/api/communication/news',
+          events: '/api/communication/events', 
+          testimonials: '/api/communication/testimonials',
+          campus_life: '/api/communication/campus-life',
+          books: '/api/communication/books',
+          contact: '/api/communication/contact',
+          home_content: '/api/communication/home-content',
+          statistics: '/api/communication/statistics'
+        },
+        message: 'Communication API overview - use specific endpoints for detailed data'
+      }
+    });
+  } catch (error) {
+    console.error('Get communication overview error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
 // @desc    Get all statistics
 // @route   GET /api/communication/statistics
 // @access  Private
@@ -910,6 +988,7 @@ const getHomeContent = async (req, res) => {
 };
 
 module.exports = {
+  getCommunicationOverview,
   getStatistics,
   getNews,
   getNewsById,
