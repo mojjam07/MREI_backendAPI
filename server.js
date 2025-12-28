@@ -131,6 +131,7 @@ require('dotenv').config();
 // --------------------
 const { errorHandler, notFound } = require('./src/middleware/errorHandler');
 const { preventDuplicateRequests } = require('./src/middleware/requestDeduplicator');
+const { deprecationWarning } = require('./src/middleware/deprecation');
 
 // --------------------
 // Import routes
@@ -141,6 +142,7 @@ const studentRoutes = require('./src/routes/students');
 const tutorRoutes = require('./src/routes/tutors');
 const academicRoutes = require('./src/routes/academics');
 const communicationRoutes = require('./src/routes/communication');
+const contentRoutes = require('./src/routes/content');
 const dashboardRoutes = require('./src/routes/dashboard');
 const adminRoutes = require('./src/routes/admin');
 const searchRoutes = require('./src/routes/search');
@@ -201,6 +203,11 @@ app.use((req, res, next) => {
 });
 
 // --------------------
+// Deprecation warnings
+// --------------------
+app.use(deprecationWarning);
+
+// --------------------
 // Request deduplication
 // --------------------
 app.use(
@@ -243,6 +250,7 @@ app.use('/api/students', studentRoutes);
 app.use('/api/tutors', tutorRoutes);
 app.use('/api/academics', academicRoutes);
 app.use('/api/communication', communicationRoutes);
+app.use('/api/content', contentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/search', searchRoutes);

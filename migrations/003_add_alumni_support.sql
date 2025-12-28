@@ -2,8 +2,8 @@
 -- Date: 2024
 -- Description: Adds alumni role support and alumni profiles table
 
--- Step 1: Create alumni_profiles table
-CREATE TABLE alumni_profiles (
+-- Step 1: Create alumni_profiles table (only if it doesn't exist)
+CREATE TABLE IF NOT EXISTS alumni_profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     alumni_id VARCHAR(20) UNIQUE NOT NULL,
@@ -25,16 +25,22 @@ ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check 
 CHECK (role IN ('student', 'tutor', 'admin', 'alumni'));
 
--- Step 3: Create unique index for alumni_id
-CREATE UNIQUE INDEX idx_alumni_profiles_alumni_id ON alumni_profiles(alumni_id);
+-- Step 3: Create unique index for alumni_id (only if it doesn't exist)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alumni_profiles_alumni_id ON alumni_profiles(alumni_id);
 
--- Step 4: Create foreign key index for performance
-CREATE INDEX idx_alumni_profiles_user_id ON alumni_profiles(user_id);
+-- Step 4: Create foreign key index for performance (only if it doesn't exist)
+CREATE INDEX IF NOT EXISTS idx_alumni_profiles_user_id ON alumni_profiles(user_id);
 
--- Step 5: Create updated_at trigger for alumni_profiles
-CREATE TRIGGER update_alumni_profiles_updated_at 
-BEFORE UPDATE ON alumni_profiles 
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Step 5: Create updated_at trigger for alumni_profiles (only if it doesn't exist)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_alumni_profiles_updated_at') THEN
+        CREATE TRIGGER update_alumni_profiles_updated_at 
+        BEFORE UPDATE ON alumni_profiles 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END
+$$;
 
 -- Step 6: Update statistics table to include alumni count
 -- First check if the column exists, if not add it
@@ -93,18 +99,26 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Step 10: Create triggers to automatically update statistics
-CREATE TRIGGER update_alumni_stats_insert
-AFTER INSERT ON users
-FOR EACH ROW
-WHEN (NEW.role = 'alumni')
-EXECUTE FUNCTION update_alumni_statistics();
-
-CREATE TRIGGER update_alumni_stats_delete
-AFTER DELETE ON users
-FOR EACH ROW
-WHEN (OLD.role = 'alumni')
-EXECUTE FUNCTION update_alumni_statistics();
+-- Step 10: Create triggers to automatically update statistics (only if they don't exist)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_alumni_stats_insert') THEN
+        CREATE TRIGGER update_alumni_stats_insert
+        AFTER INSERT ON users
+        FOR EACH ROW
+        WHEN (NEW.role = 'alumni')
+        EXECUTE FUNCTION update_alumni_statistics();
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_alumni_stats_delete') THEN
+        CREATE TRIGGER update_alumni_stats_delete
+        AFTER DELETE ON users
+        FOR EACH ROW
+        WHEN (OLD.role = 'alumni')
+        EXECUTE FUNCTION update_alumni_statistics();
+    END IF;
+END
+$$;
 
 -- Step 11: Create function to automatically create alumni profile
 CREATE OR REPLACE FUNCTION create_alumni_profile()
@@ -126,12 +140,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Step 12: Create trigger to automatically create alumni profile on user insert
-CREATE TRIGGER create_alumni_profile_trigger
-AFTER INSERT ON users
-FOR EACH ROW
-WHEN (NEW.role = 'alumni')
-EXECUTE FUNCTION create_alumni_profile();
+-- Step 12: Create trigger to automatically create alumni profile on user insert (only if it doesn't exist)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'create_alumni_profile_trigger') THEN
+        CREATE TRIGGER create_alumni_profile_trigger
+        AFTER INSERT ON users
+        FOR EACH ROW
+        WHEN (NEW.role = 'alumni')
+        EXECUTE FUNCTION create_alumni_profile();
+    END IF;
+END
+$$;
 
 -- Step 13: Update existing alumni users (if any) to have profiles
 -- First check if there are any existing alumni users without profiles
