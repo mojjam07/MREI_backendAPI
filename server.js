@@ -259,16 +259,35 @@ app.use(notFound);
 app.use(errorHandler);
 
 // --------------------
-// Start server
+// Database Migration and Server Startup
 // --------------------
-app.listen(PORT, () => {
-  console.log('====================================');
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🩺 Health check: /health`);
-  console.log(`🔐 JWT Secret: ${process.env.JWT_SECRET ? 'Loaded' : 'Missing'}`);
-  console.log('====================================');
-});
+async function startServer() {
+  try {
+    // Import and run migrations before starting server
+    console.log('🔄 Starting database migration process...');
+    const { runMigrations } = require('./scripts/migrate.js');
+    await runMigrations();
+    console.log('✅ Database migrations completed successfully');
+
+    // Start the HTTP server
+    app.listen(PORT, () => {
+      console.log('====================================');
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🩺 Health check: /health`);
+      console.log(`🔐 JWT Secret: ${process.env.JWT_SECRET ? 'Loaded' : 'Missing'}`);
+      console.log('====================================');
+    });
+
+  } catch (error) {
+    console.error('❌ Failed to start server:', error.message);
+    console.error('Database migration may have failed. Please check your database connection and try again.');
+    process.exit(1);
+  }
+}
+
+// Start the server with migrations
+startServer();
 
 // --------------------
 // Process-level safety
