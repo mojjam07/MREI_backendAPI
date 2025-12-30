@@ -280,6 +280,38 @@ const validateContact = [
   handleValidationErrors
 ];
 
+// Campus Life validation rules
+const validateCampusLife = [
+  body('title')
+    .notEmpty()
+    .withMessage('Title is required')
+    .isLength({ max: 200 })
+    .withMessage('Title must not exceed 200 characters'),
+  body('content')
+    .notEmpty()
+    .withMessage('Content is required'),
+  body('category')
+    .optional()
+    .isLength({ max: 50 })
+    .withMessage('Category must not exceed 50 characters'),
+  handleValidationErrors
+];
+
+// Book validation rules
+const validateBook = [
+  body('title')
+    .notEmpty()
+    .withMessage('Book title is required')
+    .isLength({ max: 200 })
+    .withMessage('Book title must not exceed 200 characters'),
+  body('author')
+    .notEmpty()
+    .withMessage('Author is required')
+    .isLength({ max: 100 })
+    .withMessage('Author must not exceed 100 characters'),
+  handleValidationErrors
+];
+
 // Parameter validation
 const validateId = [
   param('id')
@@ -318,6 +350,8 @@ module.exports = {
   validateEvent,
   validateTestimonial,
   validateContact,
+  validateCampusLife,
+  validateBook,
   validateId,
   validatePagination
 };

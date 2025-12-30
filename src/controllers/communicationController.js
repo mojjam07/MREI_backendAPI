@@ -170,10 +170,11 @@ const getBooks = async (req, res) => {
       queryParams.push(`%${search}%`);
     }
 
-    // Add pagination
-    paramCount++;
-    query += ` ORDER BY title ASC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    queryParams.push(limit, offset);
+    // Add pagination with correct parameter indices
+    const limitParamIndex = paramCount + 1;
+    const offsetParamIndex = paramCount + 2;
+    query += ` ORDER BY title ASC LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
 
     const books = await pool.query(query, queryParams);
 

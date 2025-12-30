@@ -1,407 +1,74 @@
 const { pool } = require('../config/database');
 
-// @desc    Get student dashboard
-// @route   GET /api/dashboard/student
-// @access  Private/Student
-const getStudentDashboard = async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    // Get student basic info
-    const studentInfoQuery = `
-      SELECT u.first_name, u.last_name, sp.student_id
-      FROM users u
-      INNER JOIN student_profiles sp ON u.id = sp.user_id
-      WHERE u.id = $1
-    `;
-    
-    const studentInfo = await pool.query(studentInfoQuery, [userId]);
-
-    if (studentInfo.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Student profile not found'
-      });
-    }
-
-    // Get enrolled courses
-    const coursesQuery = `
-      SELECT c.id, c.title, c.description, c.credits,
-             u.first_name || ' ' || u.last_name as tutor_name,
-             tp.tutor_id,
-             e.enrolled_at
-      FROM courses c
-      INNER JOIN enrollments e ON c.id = e.course_id
-      INNER JOIN users u ON c.tutor_id = u.id
-      INNER JOIN tutor_profiles tp ON u.id = tp.user_id
-      WHERE e.student_id = $1
-      ORDER BY e.enrolled_at DESC
-    `;
-    
-    const courses = await pool.query(coursesQuery, [userId]);
-
-    // Get upcoming assignments
-    const upcomingAssignmentsQuery = `
-      SELECT a.id, a.title, a.description, a.due_date, a.max_score,
-             c.title as course_title,
-             CASE 
-               WHEN s.id IS NOT NULL THEN 'submitted'
-               ELSE 'pending'
-             END as submission_status
-      FROM assignments a
-      INNER JOIN courses c ON a.course_id = c.id
-      INNER JOIN enrollments e ON c.id = e.course_id
-      LEFT JOIN submissions s ON a.id = s.assignment_id AND s.student_id = e.student_id
-      WHERE e.student_id = $1 AND a.due_date >= CURRENT_DATE
-      ORDER BY a.due_date ASC
-      LIMIT 5
-    `;
-    
-    const upcomingAssignments = await pool.query(upcomingAssignmentsQuery, [userId]);
-
-    // Get recent submissions
-    const recentSubmissionsQuery = `
-      SELECT s.id, s.submitted_at, s.score, s.feedback,
-             a.title as assignment_title,
-             c.title as course_title
-      FROM submissions s
-      INNER JOIN assignments a ON s.assignment_id = a.id
-      INNER JOIN courses c ON a.course_id = c.id
-      WHERE s.student_id = $1
-      ORDER BY s.submitted_at DESC
-      LIMIT 5
-    `;
-    
-    const recentSubmissions = await pool.query(recentSubmissionsQuery, [userId]);
-
-    // Get attendance summary
-    const attendanceQuery = `
-      SELECT 
-        COUNT(*) as total_days,
-        SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_days,
-        SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent_days,
-        SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late_days,
-        ROUND(SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) as attendance_percentage
-      FROM attendance
-      WHERE student_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days'
-    `;
-    
-    const attendance = await pool.query(attendanceQuery, [userId]);
-
-    // Get grade summary
-    const gradeSummaryQuery = `
-      SELECT 
-        COUNT(s.id) as total_submissions,
-        AVG(s.score::numeric) as average_score,
-        COUNT(CASE WHEN s.score IS NOT NULL THEN 1 END) as graded_submissions,
-        COUNT(CASE WHEN s.score >= a.max_score * 0.8 THEN 1 END) as excellent_grades
-      FROM submissions s
-      INNER JOIN assignments a ON s.assignment_id = a.id
-      WHERE s.student_id = $1 AND s.score IS NOT NULL
-    `;
-    
-    const gradeSummary = await pool.query(gradeSummaryQuery, [userId]);
-
-    res.json({
-      success: true,
-      data: {
-        student_info: studentInfo.rows[0],
-        enrolled_courses: courses.rows,
-        upcoming_assignments: upcomingAssignments.rows,
-        recent_submissions: recentSubmissions.rows,
-        attendance_summary: attendance.rows[0],
-        grade_summary: gradeSummary.rows[0]
-      }
-    });
-  } catch (error) {
-    console.error('Get student dashboard error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-};
-
-// @desc    Get tutor dashboard
-// @route   GET /api/dashboard/tutor
-// @access  Private/Tutor
-const getTutorDashboard = async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    // Get tutor basic info
-    const tutorInfoQuery = `
-      SELECT u.first_name, u.last_name, tp.tutor_id, tp.specialization
-      FROM users u
-      INNER JOIN tutor_profiles tp ON u.id = tp.user_id
-      WHERE u.id = $1
-    `;
-    
-    const tutorInfo = await pool.query(tutorInfoQuery, [userId]);
-
-    if (tutorInfo.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Tutor profile not found'
-      });
-    }
-
-    // Get courses with enrollment counts
-    const coursesQuery = `
-      SELECT c.id, c.title, c.description, c.credits, c.created_at,
-             COUNT(DISTINCT e.student_id) as enrolled_students,
-             COUNT(DISTINCT a.id) as total_assignments,
-             COUNT(DISTINCT s.id) as total_submissions
-      FROM courses c
-      LEFT JOIN enrollments e ON c.id = e.course_id
-      LEFT JOIN assignments a ON c.id = a.course_id
-      LEFT JOIN submissions s ON a.id = s.assignment_id
-      WHERE c.tutor_id = $1
-      GROUP BY c.id, c.title, c.description, c.credits, c.created_at
-      ORDER BY c.created_at DESC
-    `;
-    
-    const courses = await pool.query(coursesQuery, [userId]);
-
-    // Get pending submissions
-    const pendingSubmissionsQuery = `
-      SELECT s.id, s.content, s.submitted_at,
-             a.title as assignment_title, a.due_date, a.max_score,
-             u.first_name || ' ' || u.last_name as student_name,
-             sp.student_id,
-             c.title as course_title
-      FROM submissions s
-      INNER JOIN assignments a ON s.assignment_id = a.id
-      INNER JOIN users u ON s.student_id = u.id
-      INNER JOIN student_profiles sp ON u.id = sp.user_id
-      INNER JOIN courses c ON a.course_id = c.id
-      WHERE c.tutor_id = $1 AND s.score IS NULL
-      ORDER BY s.submitted_at ASC
-      LIMIT 10
-    `;
-    
-    const pendingSubmissions = await pool.query(pendingSubmissionsQuery, [userId]);
-
-    // Get upcoming assignments due
-    const upcomingAssignmentsQuery = `
-      SELECT a.id, a.title, a.description, a.due_date, a.max_score,
-             c.title as course_title,
-             COUNT(s.id) as submission_count,
-             COUNT(CASE WHEN s.score IS NOT NULL THEN 1 END) as graded_count
-      FROM assignments a
-      INNER JOIN courses c ON a.course_id = c.id
-      LEFT JOIN submissions s ON a.id = s.assignment_id
-      WHERE c.tutor_id = $1 AND a.due_date >= CURRENT_DATE AND a.due_date <= CURRENT_DATE + INTERVAL '7 days'
-      GROUP BY a.id, a.title, a.description, a.due_date, a.max_score, c.title
-      ORDER BY a.due_date ASC
-    `;
-    
-    const upcomingAssignments = await pool.query(upcomingAssignmentsQuery, [userId]);
-
-    // Get recent activity
-    const recentActivityQuery = `
-      SELECT 
-        'submission' as type,
-        s.submitted_at as timestamp,
-        u.first_name || ' ' || u.last_name as actor,
-        a.title as details,
-        c.title as course
-      FROM submissions s
-      INNER JOIN assignments a ON s.assignment_id = a.id
-      INNER JOIN users u ON s.student_id = u.id
-      INNER JOIN courses c ON a.course_id = c.id
-      WHERE c.tutor_id = $1
-      
-      UNION ALL
-      
-      SELECT 
-        'enrollment' as type,
-        e.enrolled_at as timestamp,
-        u.first_name || ' ' || u.last_name as actor,
-        'enrolled in ' || c.title as details,
-        c.title as course
-      FROM enrollments e
-      INNER JOIN users u ON e.student_id = u.id
-      INNER JOIN courses c ON e.course_id = c.id
-      WHERE c.tutor_id = $1
-      
-      ORDER BY timestamp DESC
-      LIMIT 10
-    `;
-    
-    const recentActivity = await pool.query(recentActivityQuery, [userId]);
-
-    // Get statistics
-    const statsQuery = `
-      SELECT 
-        COUNT(DISTINCT c.id) as total_courses,
-        COUNT(DISTINCT e.student_id) as total_students,
-        COUNT(DISTINCT a.id) as total_assignments,
-        COUNT(DISTINCT s.id) as total_submissions,
-        COUNT(DISTINCT CASE WHEN s.score IS NULL THEN s.id END) as pending_submissions,
-        ROUND(AVG(s.score::numeric), 2) as average_score
-      FROM courses c
-      LEFT JOIN enrollments e ON c.id = e.course_id
-      LEFT JOIN assignments a ON c.id = a.course_id
-      LEFT JOIN submissions s ON a.id = s.assignment_id
-      WHERE c.tutor_id = $1
-    `;
-    
-    const stats = await pool.query(statsQuery, [userId]);
-
-    res.json({
-      success: true,
-      data: {
-        tutor_info: tutorInfo.rows[0],
-        courses: courses.rows,
-        pending_submissions: pendingSubmissions.rows,
-        upcoming_assignments: upcomingAssignments.rows,
-        recent_activity: recentActivity.rows,
-        statistics: stats.rows[0]
-      }
-    });
-  } catch (error) {
-    console.error('Get tutor dashboard error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-};
-
-
-
-// @desc    Get dashboard statistics
-// @route   GET /api/dashboard-stats
-// @access  Private
-const getDashboardStats = async (req, res) => {
-  try {
-    const statsQuery = `
-      SELECT 
-        (SELECT COUNT(*) FROM users WHERE role = 'student') as total_students,
-        (SELECT COUNT(*) FROM users WHERE role = 'tutor') as total_tutors,
-        (SELECT COUNT(*) FROM courses) as total_courses,
-        (SELECT COUNT(*) FROM assignments) as total_assignments,
-        (SELECT COUNT(*) FROM submissions) as total_submissions,
-        (SELECT COUNT(*) FROM enrollments) as total_enrollments
-    `;
-    
-    const stats = await pool.query(statsQuery);
-
-    res.json({
-      success: true,
-      data: {
-        statistics: stats.rows[0]
-      }
-    });
-  } catch (error) {
-    console.error('Get dashboard stats error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-};
-
-// @desc    Get system statistics for admin dashboard
-// @route   GET /api/admin/dashboard
+// @desc    Get all news for admin (including unpublished)
+// @route   GET /api/dashboard/admin/news
 // @access  Private/Admin
-const getAdminDashboard = async (req, res) => {
+const getAdminNews = async (req, res) => {
   try {
-    // Get comprehensive statistics
-    const statsQuery = `
-      SELECT 
-        (SELECT COUNT(*) FROM users WHERE role = 'student') as active_students,
-        (SELECT COUNT(*) FROM users WHERE role = 'tutor') as tutors,
-        (SELECT COUNT(*) FROM courses) as courses,
-        (SELECT COUNT(*) FROM news WHERE created_at >= CURRENT_DATE - INTERVAL '30 days') as news_count,
-        (SELECT COUNT(*) FROM testimonials WHERE created_at >= CURRENT_DATE - INTERVAL '30 days') as testimonials_count,
-        (SELECT COUNT(*) FROM contact_messages WHERE created_at >= CURRENT_DATE - INTERVAL '30 days') as messages_count,
-        ROUND(
-          (SELECT COUNT(*) * 100.0 / NULLIF((
-            SELECT COUNT(*) FROM assignments
-          ), 0)
-          FROM submissions s
-          INNER JOIN assignments a ON s.assignment_id = a.id
-          WHERE s.score >= a.max_score * 0.8
-          ), 2
-        ) as success_rate
-    `;
-    
-    const stats = await pool.query(statsQuery);
+    const { page = 1, limit = 10, search, published } = req.query;
+    const offset = (page - 1) * limit;
 
-    // Get recent activities
-    const recentActivitiesQuery = `
-      SELECT 
-        'news' as type,
-        title,
-        author,
-        created_at
+    let query = `
+      SELECT id, title, content, category, author, published, created_at, updated_at
       FROM news
-      WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
-      
-      UNION ALL
-      
-      SELECT 
-        'event' as type,
-        title,
-        organizer as author,
-        created_at
-      FROM events
-      WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
-      
-      UNION ALL
-      
-      SELECT 
-        'testimonial' as type,
-        student_name as title,
-        author_title as author,
-        created_at
-      FROM testimonials
-      WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
-      
-      ORDER BY created_at DESC
-      LIMIT 10
+      WHERE 1=1
     `;
     
-    const recentActivities = await pool.query(recentActivitiesQuery);
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (search) {
+      paramCount++;
+      query += ` AND (title ILIKE $${paramCount} OR content ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    if (published !== undefined && published !== '') {
+      paramCount++;
+      query += ` AND published = $${paramCount}`;
+      queryParams.push(published === 'true');
+    }
+
+    // Add pagination parameters
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const news = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM news WHERE 1=1';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (title ILIKE $${countParamCount} OR content ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    if (published !== undefined && published !== '') {
+      countParamCount++;
+      countQuery += ` AND published = $${countParamCount}`;
+      countParams.push(published === 'true');
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalNews = parseInt(countResult.rows[0].count);
 
     res.json({
       success: true,
       data: {
-        statistics: stats.rows[0],
-        recent_activities: recentActivities.rows
+        news: news.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalNews,
+          pages: Math.ceil(totalNews / limit)
+        }
       }
     });
   } catch (error) {
-    console.error('Get admin dashboard error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-};
-
-// NEWS MANAGEMENT ENDPOINTS
-
-// @desc    Get all news
-// @route   GET /api/admin/news
-// @access  Private/Admin
-const getAllNews = async (req, res) => {
-  try {
-    const newsQuery = `
-      SELECT * FROM news
-      ORDER BY created_at DESC
-    `;
-    
-    const news = await pool.query(newsQuery);
-
-    res.json({
-      success: true,
-      data: news.rows
-    });
-  } catch (error) {
-    console.error('Get all news error:', error);
+    console.error('Get admin news error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -410,25 +77,26 @@ const getAllNews = async (req, res) => {
 };
 
 // @desc    Create news
-// @route   POST /api/admin/news
+// @route   POST /api/dashboard/admin/news
 // @access  Private/Admin
 const createNews = async (req, res) => {
   try {
-    const { title, content, category, author, published, image } = req.body;
+    const { title, content, category, author, published = true } = req.body;
 
-    const newsQuery = `
-      INSERT INTO news (title, content, category, author, published, image)
-      VALUES ($1, $2, $3, $4, $5, $6)
+    const insertQuery = `
+      INSERT INTO news (title, content, category, author, published, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
       RETURNING *
     `;
     
-    const news = await pool.query(newsQuery, [
-      title, content, category, author, published, image
-    ]);
+    const newNews = await pool.query(insertQuery, [title, content, category, author, published]);
 
     res.status(201).json({
       success: true,
-      data: news.rows[0]
+      message: 'News created successfully',
+      data: {
+        news: newNews.rows[0]
+      }
     });
   } catch (error) {
     console.error('Create news error:', error);
@@ -440,25 +108,23 @@ const createNews = async (req, res) => {
 };
 
 // @desc    Update news
-// @route   PUT /api/admin/news/:id
+// @route   PUT /api/dashboard/admin/news/:id
 // @access  Private/Admin
 const updateNews = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, category, author, published, image } = req.body;
+    const { title, content, category, author, published } = req.body;
 
-    const newsQuery = `
+    const updateQuery = `
       UPDATE news 
-      SET title = $1, content = $2, category = $3, author = $4, published = $5, image = $6, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $7
+      SET title = $1, content = $2, category = $3, author = $4, published = $5, updated_at = NOW()
+      WHERE id = $6
       RETURNING *
     `;
     
-    const news = await pool.query(newsQuery, [
-      title, content, category, author, published, image, id
-    ]);
+    const updatedNews = await pool.query(updateQuery, [title, content, category, author, published, id]);
 
-    if (news.rows.length === 0) {
+    if (updatedNews.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'News not found'
@@ -467,7 +133,10 @@ const updateNews = async (req, res) => {
 
     res.json({
       success: true,
-      data: news.rows[0]
+      message: 'News updated successfully',
+      data: {
+        news: updatedNews.rows[0]
+      }
     });
   } catch (error) {
     console.error('Update news error:', error);
@@ -479,16 +148,15 @@ const updateNews = async (req, res) => {
 };
 
 // @desc    Delete news
-// @route   DELETE /api/admin/news/:id
+// @route   DELETE /api/dashboard/admin/news/:id
 // @access  Private/Admin
 const deleteNews = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleteQuery = 'DELETE FROM news WHERE id = $1 RETURNING *';
-    const deletedNews = await pool.query(deleteQuery, [id]);
-
-    if (deletedNews.rows.length === 0) {
+    const result = await pool.query('DELETE FROM news WHERE id = $1', [id]);
+    
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: 'News not found'
@@ -508,26 +176,71 @@ const deleteNews = async (req, res) => {
   }
 };
 
-// EVENTS MANAGEMENT ENDPOINTS
-
-// @desc    Get all events
-// @route   GET /api/admin/events
+// @desc    Get all events for admin
+// @route   GET /api/dashboard/admin/events
 // @access  Private/Admin
-const getAllEvents = async (req, res) => {
+const getAdminEvents = async (req, res) => {
   try {
-    const eventsQuery = `
-      SELECT * FROM events
-      ORDER BY event_date DESC
+    const { page = 1, limit = 10, search, upcoming } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, title, description, event_date, location, organizer, created_at, updated_at
+      FROM events
+      WHERE 1=1
     `;
     
-    const events = await pool.query(eventsQuery);
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (search) {
+      paramCount++;
+      query += ` AND (title ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    if (upcoming === 'true') {
+      query += ` AND event_date >= CURRENT_DATE`;
+    }
+
+    // Add pagination parameters
+    query += ` ORDER BY event_date ASC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const events = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM events WHERE 1=1';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (title ILIKE $${countParamCount} OR description ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    if (upcoming === 'true') {
+      countQuery += ` AND event_date >= CURRENT_DATE`;
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalEvents = parseInt(countResult.rows[0].count);
 
     res.json({
       success: true,
-      data: events.rows
+      data: {
+        events: events.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalEvents,
+          pages: Math.ceil(totalEvents / limit)
+        }
+      }
     });
   } catch (error) {
-    console.error('Get all events error:', error);
+    console.error('Get admin events error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -536,25 +249,26 @@ const getAllEvents = async (req, res) => {
 };
 
 // @desc    Create event
-// @route   POST /api/admin/events
+// @route   POST /api/dashboard/admin/events
 // @access  Private/Admin
 const createEvent = async (req, res) => {
   try {
-    const { title, description, event_date, location, organizer, video_id } = req.body;
+    const { title, description, event_date, location, organizer } = req.body;
 
-    const eventQuery = `
-      INSERT INTO events (title, description, event_date, location, organizer, video_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
+    const insertQuery = `
+      INSERT INTO events (title, description, event_date, location, organizer, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
       RETURNING *
     `;
     
-    const event = await pool.query(eventQuery, [
-      title, description, event_date, location, organizer, video_id
-    ]);
+    const newEvent = await pool.query(insertQuery, [title, description, event_date, location, organizer]);
 
     res.status(201).json({
       success: true,
-      data: event.rows[0]
+      message: 'Event created successfully',
+      data: {
+        event: newEvent.rows[0]
+      }
     });
   } catch (error) {
     console.error('Create event error:', error);
@@ -566,25 +280,23 @@ const createEvent = async (req, res) => {
 };
 
 // @desc    Update event
-// @route   PUT /api/admin/events/:id
+// @route   PUT /api/dashboard/admin/events/:id
 // @access  Private/Admin
 const updateEvent = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, event_date, location, organizer, video_id } = req.body;
+    const { title, description, event_date, location, organizer } = req.body;
 
-    const eventQuery = `
+    const updateQuery = `
       UPDATE events 
-      SET title = $1, description = $2, event_date = $3, location = $4, organizer = $5, video_id = $6, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $7
+      SET title = $1, description = $2, event_date = $3, location = $4, organizer = $5, updated_at = NOW()
+      WHERE id = $6
       RETURNING *
     `;
     
-    const event = await pool.query(eventQuery, [
-      title, description, event_date, location, organizer, video_id, id
-    ]);
+    const updatedEvent = await pool.query(updateQuery, [title, description, event_date, location, organizer, id]);
 
-    if (event.rows.length === 0) {
+    if (updatedEvent.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Event not found'
@@ -593,7 +305,10 @@ const updateEvent = async (req, res) => {
 
     res.json({
       success: true,
-      data: event.rows[0]
+      message: 'Event updated successfully',
+      data: {
+        event: updatedEvent.rows[0]
+      }
     });
   } catch (error) {
     console.error('Update event error:', error);
@@ -605,16 +320,15 @@ const updateEvent = async (req, res) => {
 };
 
 // @desc    Delete event
-// @route   DELETE /api/admin/events/:id
+// @route   DELETE /api/dashboard/admin/events/:id
 // @access  Private/Admin
 const deleteEvent = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleteQuery = 'DELETE FROM events WHERE id = $1 RETURNING *';
-    const deletedEvent = await pool.query(deleteQuery, [id]);
-
-    if (deletedEvent.rows.length === 0) {
+    const result = await pool.query('DELETE FROM events WHERE id = $1', [id]);
+    
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: 'Event not found'
@@ -634,26 +348,75 @@ const deleteEvent = async (req, res) => {
   }
 };
 
-// TESTIMONIALS MANAGEMENT ENDPOINTS
-
-// @desc    Get all testimonials
-// @route   GET /api/admin/testimonials
+// @desc    Get all testimonials for admin (including unapproved)
+// @route   GET /api/dashboard/admin/testimonials
 // @access  Private/Admin
-const getAllTestimonials = async (req, res) => {
+const getAdminTestimonials = async (req, res) => {
   try {
-    const testimonialsQuery = `
-      SELECT * FROM testimonials
-      ORDER BY created_at DESC
+    const { page = 1, limit = 10, search, approved } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, student_name, content, rating, position, company, approved, created_at
+      FROM testimonials
+      WHERE 1=1
     `;
     
-    const testimonials = await pool.query(testimonialsQuery);
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (search) {
+      paramCount++;
+      query += ` AND (student_name ILIKE $${paramCount} OR content ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    if (approved !== undefined && approved !== '') {
+      paramCount++;
+      query += ` AND approved = $${paramCount}`;
+      queryParams.push(approved === 'true');
+    }
+
+    // Add pagination
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const testimonials = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM testimonials WHERE 1=1';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (student_name ILIKE $${countParamCount} OR content ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    if (approved !== undefined && approved !== '') {
+      countParamCount++;
+      countQuery += ` AND approved = $${countParamCount}`;
+      countParams.push(approved === 'true');
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalTestimonials = parseInt(countResult.rows[0].count);
 
     res.json({
       success: true,
-      data: testimonials.rows
+      data: {
+        testimonials: testimonials.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalTestimonials,
+          pages: Math.ceil(totalTestimonials / limit)
+        }
+      }
     });
   } catch (error) {
-    console.error('Get all testimonials error:', error);
+    console.error('Get admin testimonials error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -662,25 +425,26 @@ const getAllTestimonials = async (req, res) => {
 };
 
 // @desc    Create testimonial
-// @route   POST /api/admin/testimonials
+// @route   POST /api/dashboard/admin/testimonials
 // @access  Private/Admin
 const createTestimonial = async (req, res) => {
   try {
-    const { student_name, content, rating, position, company, approved, author, author_title, image } = req.body;
+    const { student_name, content, rating, position, company, approved = true } = req.body;
 
-    const testimonialQuery = `
-      INSERT INTO testimonials (student_name, content, rating, position, company, approved, author, author_title, image)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    const insertQuery = `
+      INSERT INTO testimonials (student_name, content, rating, position, company, approved, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
       RETURNING *
     `;
     
-    const testimonial = await pool.query(testimonialQuery, [
-      student_name, content, rating, position, company, approved, author, author_title, image
-    ]);
+    const newTestimonial = await pool.query(insertQuery, [student_name, content, rating, position, company, approved]);
 
     res.status(201).json({
       success: true,
-      data: testimonial.rows[0]
+      message: 'Testimonial created successfully',
+      data: {
+        testimonial: newTestimonial.rows[0]
+      }
     });
   } catch (error) {
     console.error('Create testimonial error:', error);
@@ -691,26 +455,24 @@ const createTestimonial = async (req, res) => {
   }
 };
 
-// @desc    Update testimonial
-// @route   PUT /api/admin/testimonials/:id
+// @desc    Update testimonial (approve/reject)
+// @route   PUT /api/dashboard/admin/testimonials/:id
 // @access  Private/Admin
 const updateTestimonial = async (req, res) => {
   try {
     const { id } = req.params;
-    const { student_name, content, rating, position, company, approved, author, author_title, image } = req.body;
+    const { student_name, content, rating, position, company, approved } = req.body;
 
-    const testimonialQuery = `
+    const updateQuery = `
       UPDATE testimonials 
-      SET student_name = $1, content = $2, rating = $3, position = $4, company = $5, approved = $6, author = $7, author_title = $8, image = $9, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $10
+      SET student_name = $1, content = $2, rating = $3, position = $4, company = $5, approved = $6
+      WHERE id = $7
       RETURNING *
     `;
     
-    const testimonial = await pool.query(testimonialQuery, [
-      student_name, content, rating, position, company, approved, author, author_title, image, id
-    ]);
+    const updatedTestimonial = await pool.query(updateQuery, [student_name, content, rating, position, company, approved, id]);
 
-    if (testimonial.rows.length === 0) {
+    if (updatedTestimonial.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Testimonial not found'
@@ -719,7 +481,10 @@ const updateTestimonial = async (req, res) => {
 
     res.json({
       success: true,
-      data: testimonial.rows[0]
+      message: 'Testimonial updated successfully',
+      data: {
+        testimonial: updatedTestimonial.rows[0]
+      }
     });
   } catch (error) {
     console.error('Update testimonial error:', error);
@@ -731,16 +496,15 @@ const updateTestimonial = async (req, res) => {
 };
 
 // @desc    Delete testimonial
-// @route   DELETE /api/admin/testimonials/:id
+// @route   DELETE /api/dashboard/admin/testimonials/:id
 // @access  Private/Admin
 const deleteTestimonial = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleteQuery = 'DELETE FROM testimonials WHERE id = $1 RETURNING *';
-    const deletedTestimonial = await pool.query(deleteQuery, [id]);
-
-    if (deletedTestimonial.rows.length === 0) {
+    const result = await pool.query('DELETE FROM testimonials WHERE id = $1', [id]);
+    
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: 'Testimonial not found'
@@ -760,102 +524,75 @@ const deleteTestimonial = async (req, res) => {
   }
 };
 
-// @desc    Approve testimonial
-// @route   PUT /api/admin/testimonials/:id/approve
+// @desc    Get all campus life content for admin
+// @route   GET /api/dashboard/admin/campus-life
 // @access  Private/Admin
-const approveTestimonial = async (req, res) => {
+const getAdminCampusLife = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { page = 1, limit = 10, search, category } = req.query;
+    const offset = (page - 1) * limit;
 
-    const approveQuery = `
-      UPDATE testimonials 
-      SET approved = TRUE
-      WHERE id = $1
-      RETURNING *
+    let query = `
+      SELECT id, title, content, image_url, category, created_at, updated_at
+      FROM campus_life
+      WHERE 1=1
     `;
     
-    const testimonial = await pool.query(approveQuery, [id]);
+    const queryParams = [];
+    let paramCount = 0;
 
-    if (testimonial.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Testimonial not found'
-      });
+    if (search) {
+      paramCount++;
+      query += ` AND (title ILIKE $${paramCount} OR content ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
     }
 
-    res.json({
-      success: true,
-      data: testimonial.rows[0],
-      message: 'Testimonial approved successfully'
-    });
-  } catch (error) {
-    console.error('Approve testimonial error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-};
-
-// @desc    Toggle testimonial approval
-// @route   PUT /api/admin/testimonials/:id/toggle-approval
-// @access  Private/Admin
-const toggleTestimonialApproval = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const toggleQuery = `
-      UPDATE testimonials 
-      SET approved = NOT approved
-      WHERE id = $1
-      RETURNING *
-    `;
-    
-    const testimonial = await pool.query(toggleQuery, [id]);
-
-    if (testimonial.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Testimonial not found'
-      });
+    if (category) {
+      paramCount++;
+      query += ` AND category ILIKE $${paramCount}`;
+      queryParams.push(`%${category}%`);
     }
 
-    const action = testimonial.rows[0].approved ? 'approved' : 'unapproved';
+    // Add pagination
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const campusLife = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM campus_life WHERE 1=1';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (title ILIKE $${countParamCount} OR content ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    if (category) {
+      countParamCount++;
+      countQuery += ` AND category ILIKE $${countParamCount}`;
+      countParams.push(`%${category}%`);
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalCampusLife = parseInt(countResult.rows[0].count);
 
     res.json({
       success: true,
-      data: testimonial.rows[0],
-      message: `Testimonial ${action} successfully`
+      data: {
+        campus_life: campusLife.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalCampusLife,
+          pages: Math.ceil(totalCampusLife / limit)
+        }
+      }
     });
   } catch (error) {
-    console.error('Toggle testimonial approval error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-};
-
-// CAMPUS LIFE MANAGEMENT ENDPOINTS
-
-// @desc    Get all campus life content
-// @route   GET /api/admin/campus-life
-// @access  Private/Admin
-const getAllCampusLife = async (req, res) => {
-  try {
-    const campusLifeQuery = `
-      SELECT * FROM campus_life
-      ORDER BY created_at DESC
-    `;
-    
-    const campusLife = await pool.query(campusLifeQuery);
-
-    res.json({
-      success: true,
-      data: campusLife.rows
-    });
-  } catch (error) {
-    console.error('Get all campus life error:', error);
+    console.error('Get admin campus life error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -864,25 +601,26 @@ const getAllCampusLife = async (req, res) => {
 };
 
 // @desc    Create campus life content
-// @route   POST /api/admin/campus-life
+// @route   POST /api/dashboard/admin/campus-life
 // @access  Private/Admin
 const createCampusLife = async (req, res) => {
   try {
-    const { title, content, category, image_url } = req.body;
+    const { title, content, image_url, category } = req.body;
 
-    const campusLifeQuery = `
-      INSERT INTO campus_life (title, content, category, image_url)
-      VALUES ($1, $2, $3, $4)
+    const insertQuery = `
+      INSERT INTO campus_life (title, content, image_url, category, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, NOW(), NOW())
       RETURNING *
     `;
     
-    const campusLife = await pool.query(campusLifeQuery, [
-      title, content, category, image_url
-    ]);
+    const newCampusLife = await pool.query(insertQuery, [title, content, image_url, category]);
 
     res.status(201).json({
       success: true,
-      data: campusLife.rows[0]
+      message: 'Campus life content created successfully',
+      data: {
+        campus_life: newCampusLife.rows[0]
+      }
     });
   } catch (error) {
     console.error('Create campus life error:', error);
@@ -894,25 +632,23 @@ const createCampusLife = async (req, res) => {
 };
 
 // @desc    Update campus life content
-// @route   PUT /api/admin/campus-life/:id
+// @route   PUT /api/dashboard/admin/campus-life/:id
 // @access  Private/Admin
 const updateCampusLife = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, category, image_url } = req.body;
+    const { title, content, image_url, category } = req.body;
 
-    const campusLifeQuery = `
+    const updateQuery = `
       UPDATE campus_life 
-      SET title = $1, content = $2, category = $3, image_url = $4, updated_at = CURRENT_TIMESTAMP
+      SET title = $1, content = $2, image_url = $3, category = $4, updated_at = NOW()
       WHERE id = $5
       RETURNING *
     `;
     
-    const campusLife = await pool.query(campusLifeQuery, [
-      title, content, category, image_url, id
-    ]);
+    const updatedCampusLife = await pool.query(updateQuery, [title, content, image_url, category, id]);
 
-    if (campusLife.rows.length === 0) {
+    if (updatedCampusLife.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Campus life content not found'
@@ -921,7 +657,10 @@ const updateCampusLife = async (req, res) => {
 
     res.json({
       success: true,
-      data: campusLife.rows[0]
+      message: 'Campus life content updated successfully',
+      data: {
+        campus_life: updatedCampusLife.rows[0]
+      }
     });
   } catch (error) {
     console.error('Update campus life error:', error);
@@ -933,16 +672,15 @@ const updateCampusLife = async (req, res) => {
 };
 
 // @desc    Delete campus life content
-// @route   DELETE /api/admin/campus-life/:id
+// @route   DELETE /api/dashboard/admin/campus-life/:id
 // @access  Private/Admin
 const deleteCampusLife = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleteQuery = 'DELETE FROM campus_life WHERE id = $1 RETURNING *';
-    const deletedCampusLife = await pool.query(deleteQuery, [id]);
-
-    if (deletedCampusLife.rows.length === 0) {
+    const result = await pool.query('DELETE FROM campus_life WHERE id = $1', [id]);
+    
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: 'Campus life content not found'
@@ -962,26 +700,88 @@ const deleteCampusLife = async (req, res) => {
   }
 };
 
-// CONTACT MESSAGES MANAGEMENT ENDPOINTS
-
-// @desc    Get all contact messages
-// @route   GET /api/admin/contact-messages
+// @desc    Get all books for admin
+// @route   GET /api/dashboard/admin/books
 // @access  Private/Admin
-const getAllContactMessages = async (req, res) => {
+const getAdminBooks = async (req, res) => {
   try {
-    const messagesQuery = `
-      SELECT * FROM contact_messages
-      ORDER BY created_at DESC
+    const { page = 1, limit = 10, search, category, available } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, title, author, isbn, category, description, cover_image, pdf_file, 
+             available, genre, publication_year, file_type, file_size, created_at, updated_at
+      FROM books
+      WHERE 1=1
     `;
     
-    const messages = await pool.query(messagesQuery);
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (search) {
+      paramCount++;
+      query += ` AND (title ILIKE $${paramCount} OR author ILIKE $${paramCount} OR isbn ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    if (category) {
+      paramCount++;
+      query += ` AND category ILIKE $${paramCount}`;
+      queryParams.push(`%${category}%`);
+    }
+
+    if (available !== undefined && available !== '') {
+      paramCount++;
+      query += ` AND available = $${paramCount}`;
+      queryParams.push(available === 'true');
+    }
+
+    // Add pagination
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const books = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM books WHERE 1=1';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (title ILIKE $${countParamCount} OR author ILIKE $${countParamCount} OR isbn ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    if (category) {
+      countParamCount++;
+      countQuery += ` AND category ILIKE $${countParamCount}`;
+      countParams.push(`%${category}%`);
+    }
+
+    if (available !== undefined && available !== '') {
+      countParamCount++;
+      countQuery += ` AND available = $${countParamCount}`;
+      countParams.push(available === 'true');
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalBooks = parseInt(countResult.rows[0].count);
 
     res.json({
       success: true,
-      data: messages.rows
+      data: {
+        books: books.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalBooks,
+          pages: Math.ceil(totalBooks / limit)
+        }
+      }
     });
   } catch (error) {
-    console.error('Get all contact messages error:', error);
+    console.error('Get admin books error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -989,36 +789,251 @@ const getAllContactMessages = async (req, res) => {
   }
 };
 
-// @desc    Update contact message
-// @route   PUT /api/admin/contact-messages/:id
-// @access  Private/Admin
-const updateContactMessage = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, reply } = req.body;
+// Validation for creating a book
+const validateBook = (req, res, next) => {
+  const { title, author } = req.body;
+  if (!title || !author) {
+    return res.status(400).json({
+      success: false,
+      message: 'Title and author are required'
+    });
+  }
+  next();
+};
 
-    const updateQuery = `
-      UPDATE contact_messages 
-      SET status = $1, reply = $2, replied_at = CASE WHEN $1 = 'replied' THEN CURRENT_TIMESTAMP ELSE replied_at END
-      WHERE id = $3
+// @desc    Create book
+// @route   POST /api/dashboard/admin/books
+// @access  Private/Admin
+const createBook = async (req, res) => {
+  try {
+    const { 
+      title, author, isbn, category, description, cover_image, pdf_file,
+      available = true, genre, publication_year, file_type, file_size 
+    } = req.body;
+
+    const insertQuery = `
+      INSERT INTO books (title, author, isbn, category, description, cover_image, pdf_file,
+                         available, genre, publication_year, file_type, file_size, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
       RETURNING *
     `;
     
-    const message = await pool.query(updateQuery, [status, reply, id]);
+    const newBook = await pool.query(insertQuery, [
+      title, author, isbn, category, description, cover_image, pdf_file,
+      available, genre, publication_year, file_type, file_size
+    ]);
 
-    if (message.rows.length === 0) {
+    res.status(201).json({
+      success: true,
+      message: 'Book created successfully',
+      data: {
+        book: newBook.rows[0]
+      }
+    });
+  } catch (error) {
+    console.error('Create book error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Update book
+// @route   PUT /api/dashboard/admin/books/:id
+// @access  Private/Admin
+const updateBook = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      title, author, isbn, category, description, cover_image, pdf_file,
+      available, genre, publication_year, file_type, file_size 
+    } = req.body;
+
+    const updateQuery = `
+      UPDATE books 
+      SET title = $1, author = $2, isbn = $3, category = $4, description = $5, 
+          cover_image = $6, pdf_file = $7, available = $8, genre = $9, 
+          publication_year = $10, file_type = $11, file_size = $12, updated_at = NOW()
+      WHERE id = $13
+      RETURNING *
+    `;
+    
+    const updatedBook = await pool.query(updateQuery, [
+      title, author, isbn, category, description, cover_image, pdf_file,
+      available, genre, publication_year, file_type, file_size, id
+    ]);
+
+    if (updatedBook.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Book not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Book updated successfully',
+      data: {
+        book: updatedBook.rows[0]
+      }
+    });
+  } catch (error) {
+    console.error('Update book error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Delete book
+// @route   DELETE /api/dashboard/admin/books/:id
+// @access  Private/Admin
+const deleteBook = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query('DELETE FROM books WHERE id = $1', [id]);
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Book not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Book deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete book error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get all contact messages for admin
+// @route   GET /api/dashboard/admin/contact-messages
+// @access  Private/Admin
+const getAdminContactMessages = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search, status } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, name, email, subject, message, status, replied_at, reply, created_at
+      FROM contact_messages
+      WHERE 1=1
+    `;
+    
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (search) {
+      paramCount++;
+      query += ` AND (name ILIKE $${paramCount} OR email ILIKE $${paramCount} OR subject ILIKE $${paramCount} OR message ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    if (status) {
+      paramCount++;
+      query += ` AND status = $${paramCount}`;
+      queryParams.push(status);
+    }
+
+    // Add pagination
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const messages = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM contact_messages WHERE 1=1';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (name ILIKE $${countParamCount} OR email ILIKE $${countParamCount} OR subject ILIKE $${countParamCount} OR message ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    if (status) {
+      countParamCount++;
+      countQuery += ` AND status = $${countParamCount}`;
+      countParams.push(status);
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalMessages = parseInt(countResult.rows[0].count);
+
+    res.json({
+      success: true,
+      data: {
+        contact_messages: messages.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalMessages,
+          pages: Math.ceil(totalMessages / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get admin contact messages error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Reply to contact message
+// @route   POST /api/dashboard/admin/contact-messages/:id/reply
+// @access  Private/Admin
+const replyContactMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reply } = req.body;
+
+    if (!reply) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reply text is required'
+      });
+    }
+
+    const updateQuery = `
+      UPDATE contact_messages 
+      SET reply = $1, status = 'replied', replied_at = NOW(), updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `;
+    
+    const updatedMessage = await pool.query(updateQuery, [reply, id]);
+
+    if (updatedMessage.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Contact message not found'
       });
     }
 
+    // TODO: Send actual email to the message sender
+
     res.json({
       success: true,
-      data: message.rows[0]
+      message: 'Reply sent successfully',
+      data: {
+        contact_message: updatedMessage.rows[0]
+      }
     });
   } catch (error) {
-    console.error('Update contact message error:', error);
+    console.error('Reply contact message error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -1026,23 +1041,23 @@ const updateContactMessage = async (req, res) => {
   }
 };
 
-// @desc    Mark contact message as read
-// @route   PUT /api/admin/contact-messages/:id/read
+// @desc    Archive contact message
+// @route   PUT /api/dashboard/admin/contact-messages/:id/archive
 // @access  Private/Admin
-const markContactMessageRead = async (req, res) => {
+const archiveContactMessage = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const markReadQuery = `
+    const updateQuery = `
       UPDATE contact_messages 
-      SET status = 'read'
+      SET status = 'archived', updated_at = NOW()
       WHERE id = $1
       RETURNING *
     `;
     
-    const message = await pool.query(markReadQuery, [id]);
+    const archivedMessage = await pool.query(updateQuery, [id]);
 
-    if (message.rows.length === 0) {
+    if (archivedMessage.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Contact message not found'
@@ -1051,11 +1066,13 @@ const markContactMessageRead = async (req, res) => {
 
     res.json({
       success: true,
-      data: message.rows[0],
-      message: 'Contact message marked as read'
+      message: 'Message archived successfully',
+      data: {
+        contact_message: archivedMessage.rows[0]
+      }
     });
   } catch (error) {
-    console.error('Mark contact message read error:', error);
+    console.error('Archive contact message error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -1064,16 +1081,15 @@ const markContactMessageRead = async (req, res) => {
 };
 
 // @desc    Delete contact message
-// @route   DELETE /api/admin/contact-messages/:id
+// @route   DELETE /api/dashboard/admin/contact-messages/:id
 // @access  Private/Admin
 const deleteContactMessage = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleteQuery = 'DELETE FROM contact_messages WHERE id = $1 RETURNING *';
-    const deletedMessage = await pool.query(deleteQuery, [id]);
-
-    if (deletedMessage.rows.length === 0) {
+    const result = await pool.query('DELETE FROM contact_messages WHERE id = $1', [id]);
+    
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: 'Contact message not found'
@@ -1093,32 +1109,34 @@ const deleteContactMessage = async (req, res) => {
   }
 };
 
+// Export createValidation helper
+const createValidation = validateBook;
+
 module.exports = {
-  getStudentDashboard,
-  getTutorDashboard,
-  getAdminDashboard,
-  getDashboardStats,
-  // Admin management functions
-  getAllNews,
+  getAdminNews,
   createNews,
   updateNews,
   deleteNews,
-  getAllEvents,
+  getAdminEvents,
   createEvent,
   updateEvent,
   deleteEvent,
-  getAllTestimonials,
+  getAdminTestimonials,
   createTestimonial,
   updateTestimonial,
   deleteTestimonial,
-  approveTestimonial,
-  toggleTestimonialApproval,
-  getAllCampusLife,
+  getAdminCampusLife,
   createCampusLife,
   updateCampusLife,
   deleteCampusLife,
-  getAllContactMessages,
-  updateContactMessage,
-  markContactMessageRead,
-  deleteContactMessage
+  getAdminBooks,
+  createBook,
+  updateBook,
+  deleteBook,
+  getAdminContactMessages,
+  replyContactMessage,
+  archiveContactMessage,
+  deleteContactMessage,
+  createValidation
 };
+
