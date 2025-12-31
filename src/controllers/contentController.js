@@ -1,4 +1,13 @@
 const { pool } = require('../config/database');
+const { 
+  transformCampusLife, 
+  transformBooks, 
+  transformEvents, 
+  transformTestimonials, 
+  transformNews,
+  transformContactMessages,
+  transformStats
+} = require('../utils/dataTransformer');
 
 // @desc    Get content overview
 // @route   GET /api/content
@@ -104,7 +113,7 @@ const getStats = async (req, res) => {
     res.json({
       success: true,
       data: {
-        statistics: stats.rows[0]
+        statistics: transformStats(stats.rows[0])
       }
     });
   } catch (error) {
@@ -125,7 +134,7 @@ const getNews = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT id, title, content, category, author, created_at, updated_at, published
+      SELECT id, title, content, category, author, image_url, created_at, updated_at, published
       FROM news
       WHERE published = true
     `;
@@ -174,7 +183,7 @@ const getNews = async (req, res) => {
     res.json({
       success: true,
       data: {
-        news: news.rows,
+        news: transformNews(news.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -200,7 +209,7 @@ const getNewsById = async (req, res) => {
     const { id } = req.params;
 
     const newsQuery = `
-      SELECT id, title, content, category, author, created_at, updated_at, published
+      SELECT id, title, content, category, author, image_url, created_at, updated_at, published
       FROM news
       WHERE id = $1 AND published = true
     `;
@@ -234,21 +243,27 @@ const getNewsById = async (req, res) => {
 // @access  Private/Admin
 const createNews = async (req, res) => {
   try {
-    const { title, content, category, author, published = true } = req.body;
+    const { title, content, category, author, status = 'published', image_url } = req.body;
+    
+    // Convert frontend status (string) to backend published (boolean)
+    // Accept both 'published'/'draft' strings AND direct boolean for flexibility
+    const published = typeof status === 'boolean' 
+      ? status 
+      : status === 'published';
 
     const insertQuery = `
-      INSERT INTO news (title, content, category, author, published, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      INSERT INTO news (title, content, category, author, published, image_url, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
       RETURNING *
     `;
     
-    const newNews = await pool.query(insertQuery, [title, content, category, author, published]);
+    const newNews = await pool.query(insertQuery, [title, content, category, author, published, image_url]);
 
     res.status(201).json({
       success: true,
       message: 'News created successfully',
       data: {
-        news: newNews.rows[0]
+        news: transformNews(newNews.rows[0])[0]  // Apply transform for consistent format
       }
     });
   } catch (error) {
@@ -266,16 +281,22 @@ const createNews = async (req, res) => {
 const updateNews = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, category, author, published } = req.body;
+    const { title, content, category, author, status, image_url } = req.body;
+
+    // Convert frontend status (string) to backend published (boolean)
+    // Accept both 'published'/'draft' strings AND direct boolean for flexibility
+    const published = typeof status === 'boolean' 
+      ? status 
+      : status === 'published';
 
     const updateQuery = `
       UPDATE news 
-      SET title = $1, content = $2, category = $3, author = $4, published = $5, updated_at = NOW()
-      WHERE id = $6
+      SET title = $1, content = $2, category = $3, author = $4, published = $5, image_url = $6, updated_at = NOW()
+      WHERE id = $7
       RETURNING *
     `;
     
-    const updatedNews = await pool.query(updateQuery, [title, content, category, author, published, id]);
+    const updatedNews = await pool.query(updateQuery, [title, content, category, author, published, image_url, id]);
 
     if (updatedNews.rows.length === 0) {
       return res.status(404).json({
@@ -288,7 +309,7 @@ const updateNews = async (req, res) => {
       success: true,
       message: 'News updated successfully',
       data: {
-        news: updatedNews.rows[0]
+        news: transformNews(updatedNews.rows[0])[0]  // Apply transform for consistent format
       }
     });
   } catch (error) {
@@ -338,7 +359,7 @@ const getEvents = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT id, title, description, event_date, location, organizer, created_at, updated_at
+      SELECT id, title, description, event_date, location, organizer, video_url, created_at, updated_at
       FROM events
       WHERE 1=1
     `;
@@ -383,7 +404,7 @@ const getEvents = async (req, res) => {
     res.json({
       success: true,
       data: {
-        events: events.rows,
+        events: transformEvents(events.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -406,15 +427,15 @@ const getEvents = async (req, res) => {
 // @access  Private/Admin
 const createEvent = async (req, res) => {
   try {
-    const { title, description, event_date, location, organizer } = req.body;
+    const { title, description, event_date, location, organizer, video_url } = req.body;
 
     const insertQuery = `
-      INSERT INTO events (title, description, event_date, location, organizer, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      INSERT INTO events (title, description, event_date, location, organizer, video_url, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
       RETURNING *
     `;
     
-    const newEvent = await pool.query(insertQuery, [title, description, event_date, location, organizer]);
+    const newEvent = await pool.query(insertQuery, [title, description, event_date, location, organizer, video_url]);
 
     res.status(201).json({
       success: true,
@@ -474,7 +495,7 @@ const getTestimonials = async (req, res) => {
     res.json({
       success: true,
       data: {
-        testimonials: testimonials.rows,
+        testimonials: transformTestimonials(testimonials.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -549,7 +570,7 @@ const getCampusLife = async (req, res) => {
     res.json({
       success: true,
       data: {
-        campus_life: campusLife.rows
+        campus_life: transformCampusLife(campusLife.rows)
       }
     });
   } catch (error) {
@@ -568,7 +589,7 @@ const getHomeContent = async (req, res) => {
   try {
     // Get recent news (last 30 days)
     const newsQuery = `
-      SELECT id, title, content, created_at, updated_at
+      SELECT id, title, content, image_url, created_at, updated_at
       FROM news
       WHERE published = true
       ORDER BY created_at DESC
@@ -577,7 +598,7 @@ const getHomeContent = async (req, res) => {
     
     // Get upcoming events (next 30 days)
     const eventsQuery = `
-      SELECT id, title, description as content, event_date, location, created_at
+      SELECT id, title, description as content, event_date, location, video_url, created_at
       FROM events
       WHERE event_date >= CURRENT_DATE
       ORDER BY event_date ASC
@@ -612,11 +633,12 @@ const getHomeContent = async (req, res) => {
     const homeContent = {
       news: newsResult.rows.map(item => ({
         ...item,
-        image: `/api/placeholder/400/250` // Default image
+        image: item.image_url || `/api/placeholder/400/250` // Use image_url or default
       })),
       events: eventsResult.rows.map(item => ({
         ...item,
-        video_id: 'dQw4w9WgXcQ' // Default YouTube video
+        video_url: item.video_url || null,
+        video_id: item.video_url ? extractVideoId(item.video_url) : 'dQw4w9WgXcQ' // Extract YouTube ID or use default
       })),
       testimonials: testimonialsResult.rows,
       campus_life: campusLifeResult.rows.map(item => ({
@@ -636,6 +658,14 @@ const getHomeContent = async (req, res) => {
       message: 'Server error'
     });
   }
+};
+
+// Helper function to extract YouTube video ID from URL
+const extractVideoId = (url) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
 };
 
 module.exports = {

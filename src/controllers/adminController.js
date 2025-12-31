@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { transformStudents, transformTutors } = require('../utils/dataTransformer');
 
 // @desc    Get all students for admin management
 // @route   GET /api/admin/students
@@ -9,7 +10,7 @@ const getStudents = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.created_at, u.last_login,
+      SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.created_at, u.last_login, u.is_active,
              sp.student_id, sp.date_of_birth, sp.address, sp.emergency_contact,
              COUNT(DISTINCT e.course_id) as enrolled_courses,
              COUNT(DISTINCT s.id) as total_submissions,
@@ -31,10 +32,9 @@ const getStudents = async (req, res) => {
     }
 
     // Add pagination
-    paramCount++;
     query += ` GROUP BY u.id, u.username, u.email, u.first_name, u.last_name, u.created_at, u.last_login, sp.student_id, sp.date_of_birth, sp.address, sp.emergency_contact`;
     query += ` ORDER BY u.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    queryParams.push(limit, offset);
+    queryParams.push(parseInt(limit), parseInt(offset));
 
     const students = await pool.query(query, queryParams);
 
@@ -50,16 +50,17 @@ const getStudents = async (req, res) => {
     const countResult = await pool.query(countQuery, countParams);
     const totalStudents = parseInt(countResult.rows[0].count);
 
+    // Transform students for frontend compatibility
+    const transformedStudents = transformStudents(students.rows);
+
     res.json({
       success: true,
-      data: {
-        students: students.rows,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: totalStudents,
-          pages: Math.ceil(totalStudents / limit)
-        }
+      data: transformedStudents,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalStudents,
+        pages: Math.ceil(totalStudents / limit)
       }
     });
   } catch (error) {
@@ -80,7 +81,7 @@ const getTutors = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.created_at, u.last_login,
+      SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.created_at, u.last_login, u.is_active,
              tp.tutor_id, tp.specialization, tp.qualification, tp.experience_years,
              COUNT(DISTINCT c.id) as total_courses,
              COUNT(DISTINCT e.student_id) as total_students,
@@ -109,10 +110,9 @@ const getTutors = async (req, res) => {
     }
 
     // Add pagination
-    paramCount++;
     query += ` GROUP BY u.id, u.username, u.email, u.first_name, u.last_name, u.created_at, u.last_login, tp.tutor_id, tp.specialization, tp.qualification, tp.experience_years`;
     query += ` ORDER BY u.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    queryParams.push(limit, offset);
+    queryParams.push(parseInt(limit), parseInt(offset));
 
     const tutors = await pool.query(query, queryParams);
 
@@ -136,16 +136,17 @@ const getTutors = async (req, res) => {
     const countResult = await pool.query(countQuery, countParams);
     const totalTutors = parseInt(countResult.rows[0].count);
 
+    // Transform tutors for frontend compatibility
+    const transformedTutors = transformTutors(tutors.rows);
+
     res.json({
       success: true,
-      data: {
-        tutors: tutors.rows,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: totalTutors,
-          pages: Math.ceil(totalTutors / limit)
-        }
+      data: transformedTutors,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalTutors,
+        pages: Math.ceil(totalTutors / limit)
       }
     });
   } catch (error) {

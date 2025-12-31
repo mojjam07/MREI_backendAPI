@@ -7,7 +7,10 @@ const { generateToken, generateRefreshToken } = require('../middleware/auth');
 // @access  Public
 const register = async (req, res) => {
   try {
-    const { username, email, password, role, first_name, last_name } = req.body;
+    // Support both camelCase and snake_case field names
+    const { username, email, password, role, firstName, lastName, first_name, last_name } = req.body;
+    const first_name_val = firstName || first_name;
+    const last_name_val = lastName || last_name;
 
     // Check if user already exists
     const userExistsQuery = 'SELECT id FROM users WHERE email = $1 OR username = $2';
@@ -32,7 +35,7 @@ const register = async (req, res) => {
     `;
     
     const newUser = await pool.query(insertUserQuery, [
-      username, email, hashedPassword, role, first_name, last_name
+      username, email, hashedPassword, role, first_name_val, last_name_val
     ]);
 
     // Create profile based on role
@@ -75,8 +78,8 @@ const register = async (req, res) => {
       message: 'User registered successfully',
       data: {
         user: newUser.rows[0],
-        token,
-        refresh_token: refreshToken
+        accessToken: token,
+        refreshToken: refreshToken
       }
     });
   } catch (error) {
@@ -140,9 +143,13 @@ const login = async (req, res) => {
     delete userData.password;
 
     res.json({
-      access: token,
-      refresh: refreshToken,
-      user: userData
+      success: true,
+      message: 'Login successful',
+      data: {
+        accessToken: token,
+        refreshToken: refreshToken,
+        user: userData
+      }
     });
   } catch (error) {
     console.error('Login error:', error);

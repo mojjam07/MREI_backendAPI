@@ -92,6 +92,11 @@ const preventDuplicateRequests = (options = {}) => {
   }
   
   return (req, res, next) => {
+    // CRITICAL: Skip OPTIONS preflight requests to avoid CORS issues
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
+    
     // Skip if method is not in the list
     if (!methods.includes(req.method.toUpperCase())) {
       return next();

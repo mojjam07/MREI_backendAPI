@@ -3,6 +3,7 @@ const router = express.Router();
 
 // Import controllers
 const {
+  getDashboardStats,
   getAdminNews,
   createNews,
   updateNews,
@@ -32,6 +33,11 @@ const {
 // Import middleware
 const { validateNews, validateEvent, validateTestimonial, validateId, validatePagination, validateCampusLife, validateBook } = require('../middleware/validation');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
+
+// @desc    Get dashboard statistics
+// @route   GET /api/dashboard/stats
+// @access  Private/Admin
+router.get('/stats', authenticateToken, authorizeRoles('admin'), getDashboardStats);
 
 // @desc    Get all news for admin (including unpublished)
 // @route   GET /api/dashboard/admin/news

@@ -200,14 +200,12 @@ const getBooks = async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        books: books.rows,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: totalBooks,
-          pages: Math.ceil(totalBooks / limit)
-        }
+      data: books.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalBooks,
+        pages: Math.ceil(totalBooks / limit)
       }
     });
   } catch (error) {
@@ -374,18 +372,15 @@ const deleteBook = async (req, res) => {
 const getDashboardStats = async (req, res) => {
   try {
     const statsQuery = `
-      SELECT 
-        (SELECT COUNT(*) FROM users WHERE role = 'student') as total_students,
-        (SELECT COUNT(*) FROM users WHERE role = 'tutor') as total_tutors,
-        (SELECT COUNT(*) FROM courses) as total_courses,
-        (SELECT COUNT(*) FROM assignments) as total_assignments,
-        (SELECT COUNT(*) FROM submissions) as total_submissions,
-        (SELECT COUNT(*) FROM enrollments) as total_enrollments,
-        (SELECT COUNT(*) FROM news WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as news_this_week,
-        (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE AND event_date <= CURRENT_DATE + INTERVAL '7 days') as events_this_week,
-        (SELECT COUNT(*) FROM contact_messages WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as messages_this_week
+      SELECT
+        (SELECT COUNT(*) FROM users) as totalUsers,
+        (SELECT COUNT(*) FROM users WHERE role = 'student') as totalStudents,
+        (SELECT COUNT(*) FROM users WHERE role = 'tutor') as totalTutors,
+        (SELECT COUNT(*) FROM news) as totalNews,
+        (SELECT COUNT(*) FROM events) as totalEvents,
+        (SELECT COUNT(*) FROM testimonials) as totalTestimonials
     `;
-    
+
     const stats = await pool.query(statsQuery);
 
     res.json({
@@ -480,6 +475,259 @@ const getHomeContent = async (req, res) => {
   }
 };
 
+// @desc    Get news
+// @route   GET /api/communication/news
+// @access  Public
+const getNews = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, category, search } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, title, content, category, author, published, created_at, updated_at
+      FROM news
+      WHERE published = true
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (category) {
+      paramCount++;
+      query += ` AND category ILIKE $${paramCount}`;
+      queryParams.push(`%${category}%`);
+    }
+
+    if (search) {
+      paramCount++;
+      query += ` AND (title ILIKE $${paramCount} OR content ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    // Add pagination
+    paramCount++;
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(limit, offset);
+
+    const news = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM news WHERE published = true';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (category) {
+      countParamCount++;
+      countQuery += ` AND category ILIKE $${countParamCount}`;
+      countParams.push(`%${category}%`);
+    }
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (title ILIKE $${countParamCount} OR content ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalNews = parseInt(countResult.rows[0].count);
+
+    res.json({
+      success: true,
+      data: news.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalNews,
+        pages: Math.ceil(totalNews / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get news error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get events
+// @route   GET /api/communication/events
+// @access  Public
+const getEvents = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, category, search } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, title, description as content, event_date, location, organizer, created_at, updated_at
+      FROM events
+      WHERE event_date >= CURRENT_DATE
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (category) {
+      paramCount++;
+      query += ` AND category ILIKE $${paramCount}`;
+      queryParams.push(`%${category}%`);
+    }
+
+    if (search) {
+      paramCount++;
+      query += ` AND (title ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    // Add pagination
+    query += ` ORDER BY event_date ASC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(limit, offset);
+
+    const events = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (category) {
+      countParamCount++;
+      countQuery += ` AND category ILIKE $${countParamCount}`;
+      countParams.push(`%${category}%`);
+    }
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (title ILIKE $${countParamCount} OR description ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalEvents = parseInt(countResult.rows[0].count);
+
+    res.json({
+      success: true,
+      data: events.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalEvents,
+        pages: Math.ceil(totalEvents / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get events error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get testimonials
+// @route   GET /api/communication/testimonials
+// @access  Public
+const getTestimonials = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+
+    const query = `
+      SELECT id, student_name as name, content, rating, position, company, approved, created_at
+      FROM testimonials
+      WHERE approved = true
+      ORDER BY rating DESC, created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+
+    const testimonials = await pool.query(query, [limit, offset]);
+
+    // Get total count
+    const countResult = await pool.query('SELECT COUNT(*) FROM testimonials WHERE approved = true');
+    const totalTestimonials = parseInt(countResult.rows[0].count);
+
+    res.json({
+      success: true,
+      data: {
+        testimonials: testimonials.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalTestimonials,
+          pages: Math.ceil(totalTestimonials / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get testimonials error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get campus life content
+// @route   GET /api/communication/campus-life
+// @access  Public
+const getCampusLife = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, category } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, title, content, image_url, category, created_at, updated_at
+      FROM campus_life
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (category) {
+      paramCount++;
+      query += ` WHERE category ILIKE $${paramCount}`;
+      queryParams.push(`%${category}%`);
+    }
+
+    // Add pagination
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(limit, offset);
+
+    const campusLife = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM campus_life';
+    const countParams = [];
+
+    if (category) {
+      countQuery += ' WHERE category ILIKE $1';
+      countParams.push(`%${category}%`);
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalCampusLife = parseInt(countResult.rows[0].count);
+
+    res.json({
+      success: true,
+      data: {
+        campus_life: campusLife.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalCampusLife,
+          pages: Math.ceil(totalCampusLife / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get campus life error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
 module.exports = {
   getCommunicationOverview,
   getContactMessages,
@@ -487,5 +735,11 @@ module.exports = {
   getBooks,
   createBook,
   updateBook,
-  deleteBook
+  deleteBook,
+  getDashboardStats,
+  getHomeContent,
+  getNews,
+  getEvents,
+  getTestimonials,
+  getCampusLife
 };

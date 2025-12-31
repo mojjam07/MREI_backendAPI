@@ -9,7 +9,13 @@ const {
   getBooks,
   createBook,
   updateBook,
-  deleteBook
+  deleteBook,
+  getDashboardStats,
+  getHomeContent,
+  getNews,
+  getEvents,
+  getTestimonials,
+  getCampusLife
 } = require('../controllers/communicationController');
 
 const { getPlaceholder } = require('../controllers/placeholderController');
@@ -52,6 +58,36 @@ router.put('/books/:id', authenticateToken, authorizeRoles('admin'), validateId,
 // @route   DELETE /api/communication/books/:id
 // @access  Private/Admin
 router.delete('/books/:id', authenticateToken, authorizeRoles('admin'), validateId, deleteBook);
+
+// @desc    Get dashboard stats
+// @route   GET /api/communication/dashboard-stats
+// @access  Private
+router.get('/dashboard-stats', authenticateToken, getDashboardStats);
+
+// @desc    Get home content (news and events)
+// @route   GET /api/communication/home-content
+// @access  Public
+router.get('/home-content', getHomeContent);
+
+// @desc    Get news
+// @route   GET /api/communication/news
+// @access  Public
+router.get('/news', validatePagination, getNews);
+
+// @desc    Get events
+// @route   GET /api/communication/events
+// @access  Public
+router.get('/events', validatePagination, getEvents);
+
+// @desc    Get testimonials
+// @route   GET /api/communication/testimonials
+// @access  Public
+router.get('/testimonials', validatePagination, getTestimonials);
+
+// @desc    Get campus life content
+// @route   GET /api/communication/campus-life
+// @access  Public
+router.get('/campus-life', validatePagination, getCampusLife);
 
 // @desc    Get placeholder image
 // @route   GET /api/communication/placeholder/:width/:height

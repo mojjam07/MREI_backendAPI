@@ -1,4 +1,117 @@
 const { pool } = require('../config/database');
+const { 
+  transformCampusLife, 
+  transformBooks, 
+  transformEvents, 
+  transformTestimonials, 
+  transformNews,
+  transformContactMessages,
+  transformStats
+} = require('../utils/dataTransformer');
+
+// @desc    Get dashboard statistics
+// @route   GET /api/dashboard/stats
+// @access  Private/Admin
+const getDashboardStats = async (req, res) => {
+  try {
+    // Run all count queries in parallel for performance
+    const [
+      totalStudents,
+      totalTutors,
+      totalNews,
+      publishedNews,
+      totalEvents,
+      upcomingEvents,
+      totalTestimonials,
+      approvedTestimonials,
+      pendingTestimonials,
+      totalCampusLife,
+      totalBooks,
+      availableBooks,
+      totalContactMessages,
+      newMessages,
+      repliedMessages
+    ] = await Promise.all([
+      // Total students
+      pool.query("SELECT COUNT(*) FROM users WHERE role = 'student'"),
+      // Total tutors
+      pool.query("SELECT COUNT(*) FROM users WHERE role = 'tutor'"),
+      // Total news
+      pool.query("SELECT COUNT(*) FROM news"),
+      // Published news
+      pool.query("SELECT COUNT(*) FROM news WHERE published = true"),
+      // Total events
+      pool.query("SELECT COUNT(*) FROM events"),
+      // Upcoming events
+      pool.query("SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE"),
+      // Total testimonials
+      pool.query("SELECT COUNT(*) FROM testimonials"),
+      // Approved testimonials
+      pool.query("SELECT COUNT(*) FROM testimonials WHERE approved = true"),
+      // Pending testimonials
+      pool.query("SELECT COUNT(*) FROM testimonials WHERE approved = false"),
+      // Total campus life content
+      pool.query("SELECT COUNT(*) FROM campus_life"),
+      // Total books
+      pool.query("SELECT COUNT(*) FROM books"),
+      // Available books
+      pool.query("SELECT COUNT(*) FROM books WHERE available = true"),
+      // Total contact messages
+      pool.query("SELECT COUNT(*) FROM contact_messages"),
+      // New/unread messages
+      pool.query("SELECT COUNT(*) FROM contact_messages WHERE status = 'new'"),
+      // Replied messages
+      pool.query("SELECT COUNT(*) FROM contact_messages WHERE status = 'replied'")
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        statistics: {
+          users: {
+            students: parseInt(totalStudents.rows[0].count) || 0,
+            tutors: parseInt(totalTutors.rows[0].count) || 0,
+            total: (parseInt(totalStudents.rows[0].count) || 0) + (parseInt(totalTutors.rows[0].count) || 0)
+          },
+          content: {
+            news: {
+              total: parseInt(totalNews.rows[0].count) || 0,
+              published: parseInt(publishedNews.rows[0].count) || 0,
+              unpublished: (parseInt(totalNews.rows[0].count) || 0) - (parseInt(publishedNews.rows[0].count) || 0)
+            },
+            events: {
+              total: parseInt(totalEvents.rows[0].count) || 0,
+              upcoming: parseInt(upcomingEvents.rows[0].count) || 0
+            },
+            testimonials: {
+              total: parseInt(totalTestimonials.rows[0].count) || 0,
+              approved: parseInt(approvedTestimonials.rows[0].count) || 0,
+              pending: parseInt(pendingTestimonials.rows[0].count) || 0
+            },
+            campus_life: parseInt(totalCampusLife.rows[0].count) || 0,
+            books: {
+              total: parseInt(totalBooks.rows[0].count) || 0,
+              available: parseInt(availableBooks.rows[0].count) || 0
+            }
+          },
+          communication: {
+            contact_messages: {
+              total: parseInt(totalContactMessages.rows[0].count) || 0,
+              new: parseInt(newMessages.rows[0].count) || 0,
+              replied: parseInt(repliedMessages.rows[0].count) || 0
+            }
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get dashboard stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
 
 // @desc    Get all news for admin (including unpublished)
 // @route   GET /api/dashboard/admin/news
@@ -58,7 +171,7 @@ const getAdminNews = async (req, res) => {
     res.json({
       success: true,
       data: {
-        news: news.rows,
+        news: transformNews(news.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -230,7 +343,7 @@ const getAdminEvents = async (req, res) => {
     res.json({
       success: true,
       data: {
-        events: events.rows,
+        events: transformEvents(events.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -406,7 +519,7 @@ const getAdminTestimonials = async (req, res) => {
     res.json({
       success: true,
       data: {
-        testimonials: testimonials.rows,
+        testimonials: transformTestimonials(testimonials.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -582,7 +695,7 @@ const getAdminCampusLife = async (req, res) => {
     res.json({
       success: true,
       data: {
-        campus_life: campusLife.rows,
+        campus_life: transformCampusLife(campusLife.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -771,7 +884,7 @@ const getAdminBooks = async (req, res) => {
     res.json({
       success: true,
       data: {
-        books: books.rows,
+        books: transformBooks(books.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -974,7 +1087,7 @@ const getAdminContactMessages = async (req, res) => {
     res.json({
       success: true,
       data: {
-        contact_messages: messages.rows,
+        contact_messages: transformContactMessages(messages.rows),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -1113,6 +1226,7 @@ const deleteContactMessage = async (req, res) => {
 const createValidation = validateBook;
 
 module.exports = {
+  getDashboardStats,
   getAdminNews,
   createNews,
   updateNews,
