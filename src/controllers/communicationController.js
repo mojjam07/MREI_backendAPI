@@ -505,7 +505,6 @@ const getNews = async (req, res) => {
     }
 
     // Add pagination
-    paramCount++;
     query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
     queryParams.push(limit, offset);
 

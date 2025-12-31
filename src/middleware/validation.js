@@ -323,13 +323,15 @@ const validateId = [
 // Query validation
 const validatePagination = [
   query('page')
-    .optional()
+    .optional({ values: 'falsy' })
     .isInt({ min: 1 })
-    .withMessage('Page must be a positive integer'),
+    .withMessage('Page must be a positive integer')
+    .toInt(),
   query('limit')
-    .optional()
+    .optional({ values: 'falsy' })
     .isInt({ min: 1, max: 100 })
-    .withMessage('Limit must be between 1 and 100'),
+    .withMessage('Limit must be between 1 and 100')
+    .toInt(),
   handleValidationErrors
 ];
 

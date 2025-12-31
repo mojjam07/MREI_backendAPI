@@ -172,6 +172,24 @@ app.use('/api/search', searchRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // --------------------
+// SPA Fallback for client-side routing (MUST be before API routes and error handlers)
+// --------------------
+// Serve index.html for all non-API routes - this fixes 404 on page refresh
+// The order matters: API routes first, then static files, then SPA fallback
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
+// Catch-all handler for SPA routes - must be AFTER static files but BEFORE error handlers
+app.get('*', (req, res, next) => {
+  // Only handle non-API routes that don't match a file
+  if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+    // Check if the request is for an API endpoint that doesn't exist
+    return res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  }
+  // Let the next middleware (notFound) handle undefined API routes
+  next();
+});
+
+// --------------------
 // Error handlers (LAST)
 // --------------------
 app.use(notFound);
