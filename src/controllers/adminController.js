@@ -445,6 +445,111 @@ const moderateContent = async (req, res) => {
   }
 };
 
+// @desc    Clear all admin dashboard sections data
+// @route   DELETE /api/admin/clear-all-data
+// @access  Private/Admin
+const clearAllAdminData = async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    console.log('🗑️ Starting to clear admin dashboard data...');
+
+    // Start transaction
+    await client.query('BEGIN');
+
+    // Clear all admin dashboard sections data
+    const clearOperations = [
+      { table: 'news', count: 0 },
+      { table: 'events', count: 0 },
+      { table: 'testimonials', count: 0 },
+      { table: 'campus_life', count: 0 },
+      { table: 'books', count: 0 },
+      { table: 'contact_messages', count: 0 }
+    ];
+
+    // Get counts before clearing and perform DELETE
+    for (const operation of clearOperations) {
+      const countResult = await client.query(`SELECT COUNT(*) FROM ${operation.table}`);
+      operation.count = parseInt(countResult.rows[0].count);
+      
+      if (operation.count > 0) {
+        await client.query(`DELETE FROM ${operation.table}`);
+        console.log(`  ✅ Cleared ${operation.count} rows from ${operation.table}`);
+      }
+    }
+
+    // Reset statistics table to zero values
+    await client.query(`
+      UPDATE statistics 
+      SET 
+        total_students = 0,
+        total_tutors = 0,
+        total_courses = 0,
+        total_assignments = 0,
+        total_submissions = 0,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+    console.log('  ✅ Reset statistics to zero');
+
+    // Commit transaction
+    await client.query('COMMIT');
+
+    // Get current counts after clearing for response
+    const currentCounts = {
+      news: 0,
+      events: 0,
+      testimonials: 0,
+      campus_life: 0,
+      books: 0,
+      contact_messages: 0
+    };
+
+    for (const [table, count] of Object.entries(currentCounts)) {
+      const result = await pool.query(`SELECT COUNT(*) FROM ${table}`);
+      currentCounts[table] = parseInt(result.rows[0].count);
+    }
+
+    console.log('✅ Admin dashboard data cleared successfully!');
+
+    res.json({
+      success: true,
+      message: 'All admin dashboard sections data cleared successfully',
+      data: {
+        cleared_data: {
+          news: { cleared: true, rows_deleted: clearOperations.find(o => o.table === 'news').count },
+          events: { cleared: true, rows_deleted: clearOperations.find(o => o.table === 'events').count },
+          testimonials: { cleared: true, rows_deleted: clearOperations.find(o => o.table === 'testimonials').count },
+          campus_life: { cleared: true, rows_deleted: clearOperations.find(o => o.table === 'campus_life').count },
+          books: { cleared: true, rows_deleted: clearOperations.find(o => o.table === 'books').count },
+          contact_messages: { cleared: true, rows_deleted: clearOperations.find(o => o.table === 'contact_messages').count },
+          statistics: { cleared: true, action: 'reset to zero' }
+        },
+        preserved_data: {
+          users: 'Preserved (students, tutors, admin accounts)',
+          student_profiles: 'Preserved',
+          tutor_profiles: 'Preserved',
+          courses: 'Preserved',
+          assignments: 'Preserved',
+          enrollments: 'Preserved',
+          submissions: 'Preserved'
+        },
+        current_counts: currentCounts
+      }
+    });
+  } catch (error) {
+    // Rollback transaction on error
+    await client.query('ROLLBACK');
+    console.error('❌ Error clearing admin data:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while clearing data',
+      error: error.message
+    });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getStudents,
   getTutors,
@@ -452,5 +557,6 @@ module.exports = {
   updateTutorStatus,
   getSystemOverview,
   getUserStats,
-  moderateContent
+  moderateContent,
+  clearAllAdminData
 };

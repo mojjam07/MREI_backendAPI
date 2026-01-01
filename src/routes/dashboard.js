@@ -27,7 +27,9 @@ const {
   getAdminContactMessages,
   replyContactMessage,
   archiveContactMessage,
-  deleteContactMessage
+  deleteContactMessage,
+  getAdminStudents,
+  getAdminTutors
 } = require('../controllers/dashboardController');
 
 // Import middleware
@@ -158,6 +160,16 @@ router.put('/admin/contact-messages/:id/archive', authenticateToken, authorizeRo
 // @route   DELETE /api/dashboard/admin/contact-messages/:id
 // @access  Private/Admin
 router.delete('/admin/contact-messages/:id', authenticateToken, authorizeRoles('admin'), validateId, deleteContactMessage);
+
+// @desc    Get all students for admin
+// @route   GET /api/dashboard/admin/students
+// @access  Private/Admin
+router.get('/admin/students', authenticateToken, authorizeRoles('admin'), validatePagination, getAdminStudents);
+
+// @desc    Get all tutors for admin
+// @route   GET /api/dashboard/admin/tutors
+// @access  Private/Admin
+router.get('/admin/tutors', authenticateToken, authorizeRoles('admin'), validatePagination, getAdminTutors);
 
 module.exports = router;
 

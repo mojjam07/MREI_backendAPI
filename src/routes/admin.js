@@ -9,7 +9,8 @@ const {
   updateTutorStatus,
   getSystemOverview,
   getUserStats,
-  moderateContent
+  moderateContent,
+  clearAllAdminData
 } = require('../controllers/adminController');
 
 // Import middleware
@@ -50,5 +51,10 @@ router.get('/stats', authenticateToken, authorizeRoles('admin'), getUserStats);
 // @route   PUT /api/admin/moderate/:type/:id
 // @access  Private/Admin
 router.put('/moderate/:type/:id', authenticateToken, authorizeRoles('admin'), moderateContent);
+
+// @desc    Clear all admin dashboard sections data
+// @route   DELETE /api/admin/clear-all-data
+// @access  Private/Admin
+router.delete('/clear-all-data', authenticateToken, authorizeRoles('admin'), clearAllAdminData);
 
 module.exports = router;

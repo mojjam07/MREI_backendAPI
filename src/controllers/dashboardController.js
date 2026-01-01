@@ -1222,6 +1222,134 @@ const deleteContactMessage = async (req, res) => {
   }
 };
 
+// @desc    Get all students for admin
+// @route   GET /api/dashboard/admin/students
+// @access  Private/Admin
+const getAdminStudents = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, username, email, first_name, last_name, role, is_active, created_at, updated_at
+      FROM users
+      WHERE role = 'student'
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (search) {
+      paramCount++;
+      query += ` AND (username ILIKE $${paramCount} OR email ILIKE $${paramCount} OR first_name ILIKE $${paramCount} OR last_name ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    // Add pagination
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const students = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM users WHERE role = \'student\'';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (username ILIKE $${countParamCount} OR email ILIKE $${countParamCount} OR first_name ILIKE $${countParamCount} OR last_name ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalStudents = parseInt(countResult.rows[0].count);
+
+    res.json({
+      success: true,
+      data: {
+        students: students.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalStudents,
+          pages: Math.ceil(totalStudents / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get admin students error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get all tutors for admin
+// @route   GET /api/dashboard/admin/tutors
+// @access  Private/Admin
+const getAdminTutors = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT id, username, email, first_name, last_name, role, is_active, created_at, updated_at
+      FROM users
+      WHERE role = 'tutor'
+    `;
+
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (search) {
+      paramCount++;
+      query += ` AND (username ILIKE $${paramCount} OR email ILIKE $${paramCount} OR first_name ILIKE $${paramCount} OR last_name ILIKE $${paramCount})`;
+      queryParams.push(`%${search}%`);
+    }
+
+    // Add pagination
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const tutors = await pool.query(query, queryParams);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) FROM users WHERE role = \'tutor\'';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (username ILIKE $${countParamCount} OR email ILIKE $${countParamCount} OR first_name ILIKE $${countParamCount} OR last_name ILIKE $${countParamCount})`;
+      countParams.push(`%${search}%`);
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalTutors = parseInt(countResult.rows[0].count);
+
+    res.json({
+      success: true,
+      data: {
+        tutors: tutors.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: totalTutors,
+          pages: Math.ceil(totalTutors / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get admin tutors error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
 // Export createValidation helper
 const createValidation = validateBook;
 
@@ -1251,6 +1379,8 @@ module.exports = {
   replyContactMessage,
   archiveContactMessage,
   deleteContactMessage,
+  getAdminStudents,
+  getAdminTutors,
   createValidation
 };
 
