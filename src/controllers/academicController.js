@@ -7,6 +7,8 @@ const getCourses = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, tutor_id } = req.query;
     const offset = (page - 1) * limit;
+    const limitInt = parseInt(limit);
+    const offsetInt = parseInt(offset);
 
     let query = `
       SELECT c.id, c.title, c.description, c.credits, c.created_at, c.updated_at,
@@ -33,15 +35,13 @@ const getCourses = async (req, res) => {
 
     if (tutor_id) {
       paramCount++;
-      query += ` AND c.tutor_id = $${paramCount}`;
+      query += ` AND c.tutor_id = $${paramCount}::uuid`;
       queryParams.push(tutor_id);
     }
 
-    // Add pagination
-    paramCount++;
+    // Add pagination - always add limit and offset as literals
     query += ` GROUP BY c.id, c.title, c.description, c.credits, c.created_at, c.updated_at, u.first_name, u.last_name, tp.tutor_id`;
-    query += ` ORDER BY c.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    queryParams.push(limit, offset);
+    query += ` ORDER BY c.created_at DESC LIMIT ${limitInt} OFFSET ${offsetInt}`;
 
     const courses = await pool.query(query, queryParams);
 
@@ -50,12 +50,12 @@ const getCourses = async (req, res) => {
     const countParams = [];
 
     if (search) {
-      countQuery += ` AND (c.title ILIKE $1 OR c.description ILIKE $1)`;
+      countQuery += ` AND (c.title ILIKE $${countParams.length + 1} OR c.description ILIKE $${countParams.length + 1})`;
       countParams.push(`%${search}%`);
     }
 
     if (tutor_id) {
-      countQuery += ` AND c.tutor_id = $${countParams.length + 1}`;
+      countQuery += ` AND c.tutor_id = $${countParams.length + 1}::uuid`;
       countParams.push(tutor_id);
     }
 
@@ -64,14 +64,12 @@ const getCourses = async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        courses: courses.rows,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: totalCourses,
-          pages: Math.ceil(totalCourses / limit)
-        }
+      data: courses.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalCourses,
+        pages: Math.ceil(totalCourses / limitInt)
       }
     });
   } catch (error) {
@@ -273,6 +271,8 @@ const getAssignments = async (req, res) => {
   try {
     const { page = 1, limit = 10, course_id, due_date } = req.query;
     const offset = (page - 1) * limit;
+    const limitInt = parseInt(limit);
+    const offsetInt = parseInt(offset);
 
     let query = `
       SELECT a.id, a.title, a.description, a.due_date, a.max_score, a.created_at, a.updated_at,
@@ -292,7 +292,7 @@ const getAssignments = async (req, res) => {
 
     if (course_id) {
       paramCount++;
-      query += ` AND a.course_id = $${paramCount}`;
+      query += ` AND a.course_id = $${paramCount}::uuid`;
       queryParams.push(course_id);
     }
 
@@ -302,11 +302,9 @@ const getAssignments = async (req, res) => {
       queryParams.push(due_date);
     }
 
-    // Add pagination
-    paramCount++;
+    // Add pagination - always add limit and offset as literals
     query += ` GROUP BY a.id, a.title, a.description, a.due_date, a.max_score, a.created_at, a.updated_at, c.title, u.first_name, u.last_name`;
-    query += ` ORDER BY a.due_date ASC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    queryParams.push(limit, offset);
+    query += ` ORDER BY a.due_date ASC LIMIT ${limitInt} OFFSET ${offsetInt}`;
 
     const assignments = await pool.query(query, queryParams);
 
@@ -315,7 +313,7 @@ const getAssignments = async (req, res) => {
     const countParams = [];
 
     if (course_id) {
-      countQuery += ` AND a.course_id = $${countParams.length + 1}`;
+      countQuery += ` AND a.course_id = $${countParams.length + 1}::uuid`;
       countParams.push(course_id);
     }
 
@@ -329,14 +327,12 @@ const getAssignments = async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        assignments: assignments.rows,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: totalAssignments,
-          pages: Math.ceil(totalAssignments / limit)
-        }
+      data: assignments.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalAssignments,
+        pages: Math.ceil(totalAssignments / limitInt)
       }
     });
   } catch (error) {

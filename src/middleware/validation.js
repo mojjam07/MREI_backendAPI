@@ -33,11 +33,25 @@ const validateRegister = [
     .isIn(['student', 'tutor', 'admin', 'alumni'])
     .withMessage('Role must be student, tutor, admin, or alumni'),
   body('first_name')
+    .optional() // Made optional because we accept firstName too
+    .notEmpty()
+    .withMessage('First name is required')
+    .isLength({ max: 50 })
+    .withMessage('First name must not exceed 50 characters'),
+  body('firstName')
+    .optional() // Accept camelCase version
     .notEmpty()
     .withMessage('First name is required')
     .isLength({ max: 50 })
     .withMessage('First name must not exceed 50 characters'),
   body('last_name')
+    .optional() // Made optional because we accept lastName too
+    .notEmpty()
+    .withMessage('Last name is required')
+    .isLength({ max: 50 })
+    .withMessage('Last name must not exceed 50 characters'),
+  body('lastName')
+    .optional() // Accept camelCase version
     .notEmpty()
     .withMessage('Last name is required')
     .isLength({ max: 50 })

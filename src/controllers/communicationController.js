@@ -372,22 +372,70 @@ const deleteBook = async (req, res) => {
 // @access  Private
 const getDashboardStats = async (req, res) => {
   try {
-    const statsQuery = `
+    // Overview stats (users)
+    const overviewQuery = `
       SELECT
         (SELECT COUNT(*) FROM users) as totalUsers,
+        (SELECT COUNT(*) FROM users WHERE is_active = true) as activeUsers,
+        (SELECT COUNT(*) FROM users WHERE created_at >= CURRENT_DATE - INTERVAL '30 days') as newUsersThisMonth,
         (SELECT COUNT(*) FROM users WHERE role = 'student') as totalStudents,
+        (SELECT COUNT(*) FROM users WHERE role = 'student' AND is_active = true) as activeStudents,
         (SELECT COUNT(*) FROM users WHERE role = 'tutor') as totalTutors,
-        (SELECT COUNT(*) FROM news) as totalNews,
-        (SELECT COUNT(*) FROM events) as totalEvents,
-        (SELECT COUNT(*) FROM testimonials) as totalTestimonials
+        (SELECT COUNT(*) FROM users WHERE role = 'tutor' AND is_active = true) as activeTutors,
+        (SELECT COUNT(*) FROM users WHERE role = 'admin') as totalAdmins
     `;
 
-    const stats = await pool.query(statsQuery);
+    // Dashboard stats (news, events, testimonials)
+    const dashboardQuery = `
+      SELECT
+        (SELECT COUNT(*) FROM news) as totalNews,
+        (SELECT COUNT(*) FROM news WHERE published = true) as publishedNews,
+        (SELECT COUNT(*) FROM news WHERE published = false) as draftNews,
+        (SELECT COUNT(*) FROM events) as totalEvents,
+        (SELECT COUNT(*) FROM events WHERE event_date >= CURRENT_DATE) as upcomingEvents,
+        (SELECT COUNT(*) FROM events WHERE event_date < CURRENT_DATE) as pastEvents,
+        (SELECT COUNT(*) FROM testimonials) as totalTestimonials,
+        (SELECT COUNT(*) FROM testimonials WHERE approved = true) as approvedTestimonials,
+        (SELECT COUNT(*) FROM testimonials WHERE approved = false) as pendingTestimonials
+    `;
+
+    // Content stats (campus life, books)
+    const contentQuery = `
+      SELECT
+        (SELECT COUNT(*) FROM campus_life) as totalCampusLife,
+        (SELECT COUNT(*) FROM books) as totalBooks,
+        (SELECT COUNT(*) FROM books WHERE available = true) as availableBooks,
+        (SELECT COUNT(*) FROM books WHERE available = false) as borrowedBooks
+    `;
+
+    // Communication stats (messages)
+    const communicationQuery = `
+      SELECT
+        (SELECT COUNT(*) FROM contact_messages) as totalMessages,
+        (SELECT COUNT(*) FROM contact_messages WHERE status = 'new') as unreadMessages,
+        (SELECT COUNT(*) FROM contact_messages WHERE status = 'replied') as repliedMessages
+    `;
+
+    // Execute all queries in parallel for better performance
+    const [overview, dashboard, content, communication] = await Promise.all([
+      pool.query(overviewQuery),
+      pool.query(dashboardQuery),
+      pool.query(contentQuery),
+      pool.query(communicationQuery)
+    ]);
+
+    // Merge all stats into a single object
+    const stats = {
+      ...overview.rows[0],
+      ...dashboard.rows[0],
+      ...content.rows[0],
+      ...communication.rows[0]
+    };
 
     res.json({
       success: true,
       data: {
-        statistics: stats.rows[0]
+        statistics: stats
       }
     });
   } catch (error) {

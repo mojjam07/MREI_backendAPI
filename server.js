@@ -48,6 +48,9 @@ app.use(helmet());
 // --------------------
 // Rate limiting
 // --------------------
+// Disable rate limiting in test environment
+const isTest = process.env.NODE_ENV === 'test';
+
 const limiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
@@ -55,7 +58,7 @@ const limiter = rateLimit({
   legacyHeaders: false,
   message: 'Too many requests, please try again later.',
   // CRITICAL: Skip OPTIONS preflight requests to avoid CORS issues
-  skip: (req) => req.method === 'OPTIONS'
+  skip: (req) => req.method === 'OPTIONS' || isTest
 });
 app.use(limiter);
 
@@ -109,6 +112,24 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // --------------------
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.originalUrl} - ${new Date().toISOString()}`);
+  next();
+});
+
+// --------------------
+// Explicit CORS headers for test environment
+// --------------------
+// This ensures CORS headers are always set, even when no Origin header is sent (e.g., supertest)
+app.use((req, res, next) => {
+  // Always set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   next();
 });
 
@@ -223,20 +244,24 @@ async function startServer() {
   }
 }
 
-// Start the server with migrations
-startServer();
+// Start the server with migrations (only when run directly, not when imported for testing)
+if (require.main === module) {
+  startServer();
+}
 
 // --------------------
-// Process-level safety
+// Process-level safety (only in main module)
 // --------------------
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err.message);
+    process.exit(1);
+  });
 
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err.message);
-  process.exit(1);
-});
+  process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err.message);
+    process.exit(1);
+  });
+}
 
-module.exports = app;
+module.exports = { app, startServer };

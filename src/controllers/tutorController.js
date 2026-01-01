@@ -65,14 +65,12 @@ const getTutors = async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        tutors: tutors.rows,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: totalTutors,
-          pages: Math.ceil(totalTutors / limit)
-        }
+      data: tutors.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalTutors,
+        pages: Math.ceil(totalTutors / limit)
       }
     });
   } catch (error) {

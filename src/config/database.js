@@ -27,14 +27,37 @@ const pool = new Pool({
 // --------------------
 // Connection events
 // --------------------
+// Only log in non-test environment to avoid Jest warnings
+const isTest = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+
 pool.on('connect', () => {
-  console.log('✅ PostgreSQL connected');
+  if (!isTest) {
+    console.log('✅ PostgreSQL connected');
+  }
 });
 
 pool.on('error', (err) => {
-  console.error('❌ PostgreSQL pool error:', err);
-  process.exit(1);
+  if (!isTest) {
+    console.error('❌ PostgreSQL pool error:', err);
+  }
+  // In test environment, don't exit - let tests handle cleanup
 });
+
+// --------------------
+// Cleanup function for tests
+// --------------------
+const closePool = async () => {
+  try {
+    await pool.end();
+    if (!isTest) {
+      console.log('✅ PostgreSQL pool closed');
+    }
+  } catch (err) {
+    if (!isTest) {
+      console.error('❌ Error closing PostgreSQL pool:', err);
+    }
+  }
+};
 
 // --------------------
 // Optional startup test
@@ -58,4 +81,5 @@ module.exports = {
   pool,
   query: (text, params) => pool.query(text, params),
   testConnection,
+  closePool,
 };

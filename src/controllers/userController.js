@@ -66,14 +66,12 @@ const getUsers = async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        users: users.rows,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: totalUsers,
-          pages: Math.ceil(totalUsers / limit)
-        }
+      data: users.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalUsers,
+        pages: Math.ceil(totalUsers / limit)
       }
     });
   } catch (error) {
