@@ -40,10 +40,13 @@ const transformBooks = (data) => {
     category: item.category || 'General',
     description: item.description || '',
     cover_image: item.cover_image || item.image_url || '',
+    pdf_file: item.pdf_file || '',
     status: item.available ? 'available' : (item.status || 'unavailable'),
     available: item.available,
     genre: item.genre || '',
     publication_year: item.publication_year || null,
+    file_type: item.file_type || '',
+    file_size: item.file_size || null,
     file_url: item.file_url || '',
     created_at: item.created_at,
     updated_at: item.updated_at

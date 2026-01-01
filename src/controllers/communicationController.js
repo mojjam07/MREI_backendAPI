@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { transformBooks } = require('../utils/dataTransformer');
 
 // @desc    Get communication overview
 // @route   GET /api/communication
@@ -200,7 +201,7 @@ const getBooks = async (req, res) => {
 
     res.json({
       success: true,
-      data: books.rows,
+      data: transformBooks(books.rows),
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
