@@ -677,21 +677,41 @@ const getEvents = async (req, res) => {
 // @access  Public
 const getTestimonials = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const { page = 1, limit = 10, approved } = req.query;
     const offset = (page - 1) * limit;
 
-    const query = `
+    let query = `
       SELECT id, student_name as name, content, rating, position, company, approved, created_at
       FROM testimonials
-      WHERE approved = true
-      ORDER BY rating DESC, created_at DESC
-      LIMIT $1 OFFSET $2
+      WHERE 1=1
     `;
 
-    const testimonials = await pool.query(query, [limit, offset]);
+    const queryParams = [];
+    let paramCount = 0;
+
+    // Filter by approval status if provided
+    if (approved !== undefined) {
+      paramCount++;
+      query += ` AND approved = $${paramCount}`;
+      queryParams.push(approved === 'true');
+    }
+
+    // Add pagination
+    query += ` ORDER BY rating DESC, created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    queryParams.push(limit, offset);
+
+    const testimonials = await pool.query(query, queryParams);
 
     // Get total count
-    const countResult = await pool.query('SELECT COUNT(*) FROM testimonials WHERE approved = true');
+    let countQuery = 'SELECT COUNT(*) FROM testimonials WHERE 1=1';
+    const countParams = [];
+
+    if (approved !== undefined) {
+      countQuery += ` AND approved = $1`;
+      countParams.push(approved === 'true');
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
     const totalTestimonials = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -708,6 +728,116 @@ const getTestimonials = async (req, res) => {
     });
   } catch (error) {
     console.error('Get testimonials error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Create testimonial
+// @route   POST /api/communication/testimonials
+// @access  Public
+const createTestimonial = async (req, res) => {
+  try {
+    const { name, content, rating, position, company } = req.body;
+
+    const insertQuery = `
+      INSERT INTO testimonials (student_name, content, rating, position, company, approved, created_at)
+      VALUES ($1, $2, $3, $4, $5, false, NOW())
+      RETURNING *
+    `;
+
+    const newTestimonial = await pool.query(insertQuery, [name, content, rating || 5, position, company]);
+
+    res.status(201).json({
+      success: true,
+      message: 'Testimonial submitted successfully and is pending approval',
+      data: {
+        testimonial: newTestimonial.rows[0]
+      }
+    });
+  } catch (error) {
+    console.error('Create testimonial error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Update testimonial
+// @route   PUT /api/communication/testimonials/:id
+// @access  Private/Admin
+const updateTestimonial = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, content, rating, position, company, approved } = req.body;
+
+    // Check if testimonial exists
+    const testimonialExists = await pool.query('SELECT * FROM testimonials WHERE id = $1', [id]);
+    if (testimonialExists.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Testimonial not found'
+      });
+    }
+
+    const updateQuery = `
+      UPDATE testimonials 
+      SET student_name = COALESCE($1, student_name),
+          content = COALESCE($2, content),
+          rating = COALESCE($3, rating),
+          position = COALESCE($4, position),
+          company = COALESCE($5, company),
+          approved = COALESCE($6, approved),
+          updated_at = NOW()
+      WHERE id = $7
+      RETURNING *
+    `;
+
+    const updatedTestimonial = await pool.query(updateQuery, [
+      name, content, rating, position, company, approved, id
+    ]);
+
+    res.json({
+      success: true,
+      message: 'Testimonial updated successfully',
+      data: {
+        testimonial: updatedTestimonial.rows[0]
+      }
+    });
+  } catch (error) {
+    console.error('Update testimonial error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Delete testimonial
+// @route   DELETE /api/communication/testimonials/:id
+// @access  Private/Admin
+const deleteTestimonial = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query('DELETE FROM testimonials WHERE id = $1', [id]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Testimonial not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Testimonial deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete testimonial error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -789,5 +919,8 @@ module.exports = {
   getNews,
   getEvents,
   getTestimonials,
+  createTestimonial,
+  updateTestimonial,
+  deleteTestimonial,
   getCampusLife
 };

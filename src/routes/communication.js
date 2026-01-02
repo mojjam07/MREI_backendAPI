@@ -15,6 +15,9 @@ const {
   getNews,
   getEvents,
   getTestimonials,
+  createTestimonial,
+  updateTestimonial,
+  deleteTestimonial,
   getCampusLife
 } = require('../controllers/communicationController');
 
@@ -83,6 +86,21 @@ router.get('/events', validatePagination, getEvents);
 // @route   GET /api/communication/testimonials
 // @access  Public
 router.get('/testimonials', validatePagination, getTestimonials);
+
+// @desc    Create testimonial
+// @route   POST /api/communication/testimonials
+// @access  Public
+router.post('/testimonials', createTestimonial);
+
+// @desc    Update testimonial
+// @route   PUT /api/communication/testimonials/:id
+// @access  Private/Admin
+router.put('/testimonials/:id', authenticateToken, authorizeRoles('admin'), validateId, updateTestimonial);
+
+// @desc    Delete testimonial
+// @route   DELETE /api/communication/testimonials/:id
+// @access  Private/Admin
+router.delete('/testimonials/:id', authenticateToken, authorizeRoles('admin'), validateId, deleteTestimonial);
 
 // @desc    Get campus life content
 // @route   GET /api/communication/campus-life
