@@ -25,6 +25,7 @@ const {
   updateBook,
   deleteBook,
   getAdminContactMessages,
+  updateContactMessage,
   replyContactMessage,
   archiveContactMessage,
   deleteContactMessage,
@@ -145,6 +146,11 @@ router.delete('/admin/books/:id', authenticateToken, authorizeRoles('admin'), va
 // @route   GET /api/dashboard/admin/contact-messages
 // @access  Private/Admin
 router.get('/admin/contact-messages', authenticateToken, authorizeRoles('admin'), validatePagination, getAdminContactMessages);
+
+// @desc    Update contact message (mark as read)
+// @route   PUT /api/dashboard/admin/contact-messages/:id
+// @access  Private/Admin
+router.put('/admin/contact-messages/:id', authenticateToken, authorizeRoles('admin'), validateId, updateContactMessage);
 
 // @desc    Reply to contact message
 // @route   POST /api/dashboard/admin/contact-messages/:id/reply

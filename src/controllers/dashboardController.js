@@ -1,13 +1,14 @@
 const { pool } = require('../config/database');
-const { 
-  transformCampusLife, 
-  transformBooks, 
-  transformEvents, 
-  transformTestimonials, 
+const {
+  transformCampusLife,
+  transformBooks,
+  transformEvents,
+  transformTestimonials,
   transformNews,
   transformContactMessages,
   transformStats
 } = require('../utils/dataTransformer');
+const { sendContactReplyEmail } = require('../utils/emailService');
 
 // @desc    Get dashboard statistics
 // @route   GET /api/dashboard/stats
@@ -122,7 +123,7 @@ const getAdminNews = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT id, title, content, category, author, published, created_at, updated_at
+      SELECT id, title, content, category, author, published, image_url, created_at, updated_at
       FROM news
       WHERE 1=1
     `;
@@ -194,21 +195,21 @@ const getAdminNews = async (req, res) => {
 // @access  Private/Admin
 const createNews = async (req, res) => {
   try {
-    const { title, content, category, author, published = true } = req.body;
+    const { title, content, category, author, published = true, image_url } = req.body;
 
     const insertQuery = `
-      INSERT INTO news (title, content, category, author, published, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      INSERT INTO news (title, content, category, author, published, image_url, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
       RETURNING *
     `;
     
-    const newNews = await pool.query(insertQuery, [title, content, category, author, published]);
+    const newNews = await pool.query(insertQuery, [title, content, category, author, published, image_url]);
 
     res.status(201).json({
       success: true,
       message: 'News created successfully',
       data: {
-        news: newNews.rows[0]
+        news: transformNews(newNews.rows[0])[0]
       }
     });
   } catch (error) {
@@ -226,16 +227,16 @@ const createNews = async (req, res) => {
 const updateNews = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, category, author, published } = req.body;
+    const { title, content, category, author, published, image_url } = req.body;
 
     const updateQuery = `
       UPDATE news 
-      SET title = $1, content = $2, category = $3, author = $4, published = $5, updated_at = NOW()
-      WHERE id = $6
+      SET title = $1, content = $2, category = $3, author = $4, published = $5, image_url = $6, updated_at = NOW()
+      WHERE id = $7
       RETURNING *
     `;
     
-    const updatedNews = await pool.query(updateQuery, [title, content, category, author, published, id]);
+    const updatedNews = await pool.query(updateQuery, [title, content, category, author, published, image_url, id]);
 
     if (updatedNews.rows.length === 0) {
       return res.status(404).json({
@@ -248,7 +249,7 @@ const updateNews = async (req, res) => {
       success: true,
       message: 'News updated successfully',
       data: {
-        news: updatedNews.rows[0]
+        news: transformNews(updatedNews.rows[0])[0]
       }
     });
   } catch (error) {
@@ -298,7 +299,7 @@ const getAdminEvents = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT id, title, description, event_date, location, organizer, created_at, updated_at
+      SELECT id, title, description, event_date, location, organizer, image_url, video_url, created_at, updated_at
       FROM events
       WHERE 1=1
     `;
@@ -366,15 +367,15 @@ const getAdminEvents = async (req, res) => {
 // @access  Private/Admin
 const createEvent = async (req, res) => {
   try {
-    const { title, description, event_date, location, organizer } = req.body;
+    const { title, description, event_date, location, organizer, image_url, video_url } = req.body;
 
     const insertQuery = `
-      INSERT INTO events (title, description, event_date, location, organizer, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      INSERT INTO events (title, description, event_date, location, organizer, image_url, video_url, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       RETURNING *
     `;
     
-    const newEvent = await pool.query(insertQuery, [title, description, event_date, location, organizer]);
+    const newEvent = await pool.query(insertQuery, [title, description, event_date, location, organizer, image_url, video_url]);
 
     res.status(201).json({
       success: true,
@@ -398,16 +399,16 @@ const createEvent = async (req, res) => {
 const updateEvent = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, event_date, location, organizer } = req.body;
+    const { title, description, event_date, location, organizer, image_url, video_url } = req.body;
 
     const updateQuery = `
       UPDATE events 
-      SET title = $1, description = $2, event_date = $3, location = $4, organizer = $5, updated_at = NOW()
-      WHERE id = $6
+      SET title = $1, description = $2, event_date = $3, location = $4, organizer = $5, image_url = $6, video_url = $7, updated_at = NOW()
+      WHERE id = $8
       RETURNING *
     `;
     
-    const updatedEvent = await pool.query(updateQuery, [title, description, event_date, location, organizer, id]);
+    const updatedEvent = await pool.query(updateQuery, [title, description, event_date, location, organizer, image_url, video_url, id]);
 
     if (updatedEvent.rows.length === 0) {
       return res.status(404).json({
@@ -470,7 +471,7 @@ const getAdminTestimonials = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT id, student_name, content, rating, position, company, approved, created_at
+      SELECT id, student_name, content, rating, position, company, image, approved, created_at, updated_at
       FROM testimonials
       WHERE 1=1
     `;
@@ -542,15 +543,15 @@ const getAdminTestimonials = async (req, res) => {
 // @access  Private/Admin
 const createTestimonial = async (req, res) => {
   try {
-    const { student_name, content, rating, position, company, approved = true } = req.body;
+    const { student_name, content, rating, position, company, image, approved = true } = req.body;
 
     const insertQuery = `
-      INSERT INTO testimonials (student_name, content, rating, position, company, approved, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      INSERT INTO testimonials (student_name, content, rating, position, company, image, approved, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       RETURNING *
     `;
     
-    const newTestimonial = await pool.query(insertQuery, [student_name, content, rating, position, company, approved]);
+    const newTestimonial = await pool.query(insertQuery, [student_name, content, rating, position, company, image, approved]);
 
     res.status(201).json({
       success: true,
@@ -574,16 +575,16 @@ const createTestimonial = async (req, res) => {
 const updateTestimonial = async (req, res) => {
   try {
     const { id } = req.params;
-    const { student_name, content, rating, position, company, approved } = req.body;
+    const { student_name, content, rating, position, company, image, approved } = req.body;
 
     const updateQuery = `
       UPDATE testimonials 
-      SET student_name = $1, content = $2, rating = $3, position = $4, company = $5, approved = $6
-      WHERE id = $7
+      SET student_name = $1, content = $2, rating = $3, position = $4, company = $5, image = $6, approved = $7, updated_at = NOW()
+      WHERE id = $8
       RETURNING *
     `;
     
-    const updatedTestimonial = await pool.query(updateQuery, [student_name, content, rating, position, company, approved, id]);
+    const updatedTestimonial = await pool.query(updateQuery, [student_name, content, rating, position, company, image, approved, id]);
 
     if (updatedTestimonial.rows.length === 0) {
       return res.status(404).json({
@@ -1105,6 +1106,82 @@ const getAdminContactMessages = async (req, res) => {
   }
 };
 
+// @desc    Update contact message (mark as read, etc)
+// @route   PUT /api/dashboard/admin/contact-messages/:id
+// @access  Private/Admin
+const updateContactMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, is_read } = req.body;
+
+    // Build dynamic update query
+    const updates = [];
+    const queryParams = [];
+    let paramCount = 0;
+
+    if (status !== undefined) {
+      paramCount++;
+      updates.push(`status = $${paramCount}`);
+      queryParams.push(status);
+    }
+
+    if (is_read !== undefined) {
+      // Map is_read to status for backward compatibility
+      paramCount++;
+      updates.push(`read = $${paramCount}`);
+      queryParams.push(is_read);
+      
+      // Auto-update status based on is_read if status not provided
+      if (status === undefined) {
+        paramCount++;
+        updates.push(`status = $${paramCount}`);
+        queryParams.push(is_read ? 'read' : 'new');
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update provided'
+      });
+    }
+
+    paramCount++;
+    updates.push(`updated_at = NOW()`);
+    
+    const updateQuery = `
+      UPDATE contact_messages 
+      SET ${updates.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING *
+    `;
+    queryParams.push(id);
+
+    const updatedMessage = await pool.query(updateQuery, queryParams);
+
+    if (updatedMessage.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contact message not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Contact message updated successfully',
+      data: {
+        contact_message: transformContactMessages([updatedMessage.rows[0]])[0]
+      }
+    });
+  } catch (error) {
+    console.error('Update contact message error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
 // @desc    Reply to contact message
 // @route   POST /api/dashboard/admin/contact-messages/:id/reply
 // @access  Private/Admin
@@ -1136,7 +1213,19 @@ const replyContactMessage = async (req, res) => {
       });
     }
 
-    // TODO: Send actual email to the message sender
+    // Send email to the message sender
+    try {
+      await sendContactReplyEmail(
+        updatedMessage.rows[0].email,
+        updatedMessage.rows[0].name,
+        updatedMessage.rows[0].message,
+        reply
+      );
+    } catch (emailError) {
+      console.error('Failed to send reply email:', emailError);
+      // Don't fail the entire operation if email fails
+      // The reply was saved successfully, just log the email error
+    }
 
     res.json({
       success: true,
@@ -1200,24 +1289,47 @@ const deleteContactMessage = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // First check if the message exists
+    const existingMessage = await pool.query('SELECT id, name, email FROM contact_messages WHERE id = $1', [id]);
+    
+    if (existingMessage.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contact message not found. It may have already been deleted.',
+        error_code: 'MESSAGE_NOT_FOUND',
+        deleted: false
+      });
+    }
+
+    // Delete the message
     const result = await pool.query('DELETE FROM contact_messages WHERE id = $1', [id]);
     
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Contact message not found'
+        message: 'Failed to delete contact message. Please try again.',
+        error_code: 'DELETE_FAILED',
+        deleted: false
       });
     }
 
     res.json({
       success: true,
-      message: 'Contact message deleted successfully'
+      message: 'Contact message deleted successfully',
+      deleted: true,
+      deleted_message: {
+        id: existingMessage.rows[0].id,
+        name: existingMessage.rows[0].name,
+        email: existingMessage.rows[0].email
+      }
     });
   } catch (error) {
     console.error('Delete contact message error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Server error while deleting contact message',
+      error_code: 'SERVER_ERROR',
+      deleted: false
     });
   }
 };
@@ -1376,6 +1488,7 @@ module.exports = {
   updateBook,
   deleteBook,
   getAdminContactMessages,
+  updateContactMessage,
   replyContactMessage,
   archiveContactMessage,
   deleteContactMessage,

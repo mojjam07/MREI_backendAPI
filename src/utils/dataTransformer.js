@@ -55,8 +55,8 @@ const transformBooks = (data) => {
 
 /**
  * Transform event data for frontend
- * Backend: event_date
- * Frontend: date (for display)
+ * Backend: event_date, image_url, video_url
+ * Frontend: date, image, video_url
  */
 const transformEvents = (data) => {
   if (!data) return [];
@@ -69,6 +69,9 @@ const transformEvents = (data) => {
     event_date: item.event_date,
     location: item.location || 'TBD',
     organizer: item.organizer || '',
+    image: item.image_url || item.image || '',
+    image_url: item.image_url || item.image || '',
+    video_url: item.video_url || '',
     status: item.status || (new Date(item.event_date) >= new Date() ? 'upcoming' : 'past'),
     created_at: item.created_at,
     updated_at: item.updated_at
@@ -91,17 +94,19 @@ const transformTestimonials = (data) => {
     rating: item.rating || 5,
     position: item.position || '',
     company: item.company || '',
+    image: item.image || item.image_url || '',
     status: item.approved ? 'approved' : (item.status || 'pending'),
     approved: item.approved,
     role: item.position || 'Student',
-    created_at: item.created_at
+    created_at: item.created_at,
+    updated_at: item.updated_at
   }));
 };
 
 /**
  * Transform news data for frontend
- * Backend: published (boolean)
- * Frontend: status (string: 'published'/'draft')
+ * Backend: published (boolean), image_url
+ * Frontend: status (string: 'published'/'draft'), image
  */
 const transformNews = (data) => {
   if (!data) return [];
@@ -114,6 +119,8 @@ const transformNews = (data) => {
     author: item.author || 'Admin',
     status: item.published ? 'published' : (item.status || 'draft'),
     published: item.published,
+    image: item.image_url || item.image || '',
+    image_url: item.image_url || item.image || '',
     created_at: item.created_at,
     updated_at: item.updated_at
   }));

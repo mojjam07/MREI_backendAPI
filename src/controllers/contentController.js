@@ -37,7 +37,7 @@ const getContentOverview = async (req, res) => {
     `;
     
     const upcomingEventsQuery = `
-      SELECT id, title, event_date, location 
+      SELECT id, title, event_date, location, image_url
       FROM events 
       WHERE event_date >= CURRENT_DATE 
       ORDER BY event_date ASC 
@@ -226,7 +226,7 @@ const getNewsById = async (req, res) => {
     res.json({
       success: true,
       data: {
-        news: news.rows[0]
+        news: transformNews(news.rows[0])[0]
       }
     });
   } catch (error) {
@@ -359,7 +359,7 @@ const getEvents = async (req, res) => {
     const offset = (page - 1) * limit;
 
     let query = `
-      SELECT id, title, description, event_date, location, organizer, video_url, created_at, updated_at
+      SELECT id, title, description, event_date, location, organizer, image_url, video_url, created_at, updated_at
       FROM events
       WHERE 1=1
     `;
@@ -427,15 +427,15 @@ const getEvents = async (req, res) => {
 // @access  Private/Admin
 const createEvent = async (req, res) => {
   try {
-    const { title, description, event_date, location, organizer, video_url } = req.body;
+    const { title, description, event_date, location, organizer, image_url, video_url } = req.body;
 
     const insertQuery = `
-      INSERT INTO events (title, description, event_date, location, organizer, video_url, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      INSERT INTO events (title, description, event_date, location, organizer, image_url, video_url, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       RETURNING *
     `;
     
-    const newEvent = await pool.query(insertQuery, [title, description, event_date, location, organizer, video_url]);
+    const newEvent = await pool.query(insertQuery, [title, description, event_date, location, organizer, image_url, video_url]);
 
     res.status(201).json({
       success: true,
@@ -598,7 +598,7 @@ const getHomeContent = async (req, res) => {
     
     // Get upcoming events (next 30 days)
     const eventsQuery = `
-      SELECT id, title, description as content, event_date, location, video_url, created_at
+      SELECT id, title, description as content, event_date, location, image_url, video_url, created_at
       FROM events
       WHERE event_date >= CURRENT_DATE
       ORDER BY event_date ASC
