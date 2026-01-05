@@ -459,7 +459,9 @@ const createEvent = async (req, res) => {
 const getTestimonials = async (req, res) => {
   try {
     const { page = 1, limit = 10, rating } = req.query;
-    const offset = (page - 1) * limit;
+    // If limit is 0 or 'all', fetch all testimonials without pagination
+    const limitValue = limit === '0' || limit === 0 || limit === 'all' ? 10000 : parseInt(limit);
+    const offset = (page - 1) * limitValue;
 
     let query = `
       SELECT id, student_name, content, rating, position, company, created_at, approved
@@ -476,7 +478,7 @@ const getTestimonials = async (req, res) => {
 
     // Add pagination
     query += ` ORDER BY rating DESC, created_at DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
-    queryParams.push(limit, offset);
+    queryParams.push(limitValue, offset);
 
     const testimonials = await pool.query(query, queryParams);
 

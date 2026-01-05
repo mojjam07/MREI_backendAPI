@@ -56,26 +56,37 @@ const transformBooks = (data) => {
 /**
  * Transform event data for frontend
  * Backend: event_date, image_url, video_url
- * Frontend: date, image, video_url
+ * Frontend: date, image, video_url, videoId (extracted from video_url)
  */
 const transformEvents = (data) => {
   if (!data) return [];
   const items = Array.isArray(data) ? data : [data];
-  return items.map(item => ({
-    id: item.id,
-    title: item.title,
-    description: item.description || '',
-    date: item.event_date,
-    event_date: item.event_date,
-    location: item.location || 'TBD',
-    organizer: item.organizer || '',
-    image: item.image_url || item.image || '',
-    image_url: item.image_url || item.image || '',
-    video_url: item.video_url || '',
-    status: item.status || (new Date(item.event_date) >= new Date() ? 'upcoming' : 'past'),
-    created_at: item.created_at,
-    updated_at: item.updated_at
-  }));
+  return items.map(item => {
+    // Extract video ID from video_url if present
+    let videoId = '';
+    if (item.video_url) {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+      const match = item.video_url.match(regExp);
+      videoId = (match && match[2].length === 11) ? match[2] : '';
+    }
+    
+    return {
+      id: item.id,
+      title: item.title,
+      description: item.description || '',
+      date: item.event_date,
+      event_date: item.event_date,
+      location: item.location || 'TBD',
+      organizer: item.organizer || '',
+      image: item.image_url || item.image || '',
+      image_url: item.image_url || item.image || '',
+      video_url: item.video_url || '',
+      videoId: videoId,
+      status: item.status || (new Date(item.event_date) >= new Date() ? 'upcoming' : 'past'),
+      created_at: item.created_at,
+      updated_at: item.updated_at
+    };
+  });
 };
 
 /**

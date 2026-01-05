@@ -113,8 +113,8 @@ async function seedDatabase() {
 
     // Update statistics
     await client.query(`
-      UPDATE statistics 
-      SET 
+      UPDATE statistics
+      SET
         total_students = (SELECT COUNT(*) FROM users WHERE role = 'student'),
         total_tutors = (SELECT COUNT(*) FROM users WHERE role = 'tutor'),
         total_courses = (SELECT COUNT(*) FROM courses),
@@ -122,6 +122,87 @@ async function seedDatabase() {
         total_submissions = (SELECT COUNT(*) FROM submissions),
         updated_at = CURRENT_TIMESTAMP
     `);
+
+    // Create sample books if none exist
+    const sampleBooks = [
+      {
+        title: 'Introduction to Computer Science',
+        author: 'John Doe',
+        isbn: '978-0-123456-78-9',
+        category: 'Computer Science',
+        description: 'A comprehensive guide to the fundamentals of computer science, covering algorithms, data structures, and programming paradigms.',
+        cover_image: '/images/placeholder-book.svg',
+        pdf_file: '/pdfs/book1.pdf',
+        genre: 'Educational',
+        publication_year: 2023
+      },
+      {
+        title: 'Advanced Mathematics for Engineers',
+        author: 'Jane Smith',
+        isbn: '978-0-123456-79-6',
+        category: 'Mathematics',
+        description: 'An in-depth exploration of mathematical concepts essential for engineering applications, including calculus and linear algebra.',
+        cover_image: '/images/placeholder-book.svg',
+        pdf_file: '/pdfs/book2.pdf',
+        genre: 'Engineering',
+        publication_year: 2022
+      },
+      {
+        title: 'Business Ethics and Corporate Responsibility',
+        author: 'Michael Johnson',
+        isbn: '978-0-123456-80-2',
+        category: 'Business',
+        description: 'Examining the principles of ethical business practices and the importance of corporate social responsibility in modern enterprises.',
+        cover_image: '/images/placeholder-book.svg',
+        pdf_file: '/pdfs/book3.pdf',
+        genre: 'Business',
+        publication_year: 2021
+      },
+      {
+        title: 'Environmental Science: A Global Perspective',
+        author: 'Sarah Williams',
+        isbn: '978-0-123456-81-9',
+        category: 'Science',
+        description: 'Understanding environmental issues from a global viewpoint, including climate change, biodiversity, and sustainable development.',
+        cover_image: '/images/placeholder-book.svg',
+        pdf_file: '/pdfs/book4.pdf',
+        genre: 'Science',
+        publication_year: 2020
+      },
+      {
+        title: 'Psychology: The Human Mind',
+        author: 'David Brown',
+        isbn: '978-0-123456-82-6',
+        category: 'Psychology',
+        description: 'An exploration of human psychology, covering cognitive processes, behavior, and mental health.',
+        cover_image: '/images/placeholder-book.svg',
+        pdf_file: '/pdfs/book5.pdf',
+        genre: 'Psychology',
+        publication_year: 2019
+      },
+      {
+        title: 'History of Modern Art',
+        author: 'Emily Davis',
+        isbn: '978-0-123456-83-3',
+        category: 'Art',
+        description: 'A journey through the evolution of modern art movements, from impressionism to contemporary art.',
+        cover_image: '/images/placeholder-book.svg',
+        pdf_file: '/pdfs/book6.pdf',
+        genre: 'Art',
+        publication_year: 2018
+      }
+    ];
+
+    for (const book of sampleBooks) {
+      await client.query(`
+        INSERT INTO books (title, author, isbn, category, description, cover_image, pdf_file, genre, publication_year, available, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, NOW(), NOW())
+        ON CONFLICT (isbn) DO NOTHING
+      `, [
+        book.title, book.author, book.isbn, book.category, book.description,
+        book.cover_image, book.pdf_file, book.genre, book.publication_year
+      ]);
+    }
 
     console.log('✅ Database seeding completed successfully!');
     console.log('');

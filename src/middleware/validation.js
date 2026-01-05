@@ -343,8 +343,17 @@ const validatePagination = [
     .toInt(),
   query('limit')
     .optional({ values: 'falsy' })
-    .isInt({ min: 1, max: 100 })
-    .withMessage('Limit must be between 1 and 100')
+    .custom((value) => {
+      // Allow 0, '0', 'all', or a number between 1 and 10000
+      if (value === 0 || value === '0' || value === 'all') {
+        return true;
+      }
+      const num = parseInt(value);
+      if (isNaN(num) || num < 1 || num > 10000) {
+        throw new Error('Limit must be between 1 and 10000, or 0/all for all records');
+      }
+      return true;
+    })
     .toInt(),
   handleValidationErrors
 ];
