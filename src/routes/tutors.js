@@ -10,7 +10,8 @@ const {
   getTutorCourses,
   getTutorStudents,
   getTutorSubmissions,
-  getTutorDashboardStats
+  getTutorDashboardStats,
+  gradeSubmission
 } = require('../controllers/tutorController');
 
 // Import middleware
@@ -57,4 +58,10 @@ router.get('/:id/submissions', authenticateToken, validateId, getTutorSubmission
 // @access  Private
 router.get('/:id/dashboard-stats', authenticateToken, validateId, getTutorDashboardStats);
 
+// @desc    Grade a submission
+// @route   PUT /api/tutors/:id/submissions/:submissionId/grade
+// @access  Private
+router.put('/:id/submissions/:submissionId/grade', authenticateToken, validateId, gradeSubmission);
+
 module.exports = router;
+

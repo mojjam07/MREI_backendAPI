@@ -474,6 +474,77 @@ const getTutorDashboardStats = async (req, res) => {
   }
 };
 
+// @desc    Grade a submission
+// @route   PUT /api/tutors/:id/submissions/:submissionId/grade
+// @access  Private
+const gradeSubmission = async (req, res) => {
+  try {
+    const { id: tutorId } = req.params;
+    const { submissionId } = req.params;
+    const { score, feedback } = req.body;
+
+    // Validate input
+    if (score === undefined || score === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Score is required'
+      });
+    }
+
+    // Check if submission exists and belongs to a course taught by this tutor
+    const submissionCheckQuery = `
+      SELECT s.id, s.score, a.max_score, c.tutor_id
+      FROM submissions s
+      INNER JOIN assignments a ON s.assignment_id = a.id
+      INNER JOIN courses c ON a.course_id = c.id
+      WHERE s.id = $1 AND c.tutor_id = $2
+    `;
+    
+    const submissionCheck = await pool.query(submissionCheckQuery, [submissionId, tutorId]);
+
+    if (submissionCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Submission not found or does not belong to your courses'
+      });
+    }
+
+    const submission = submissionCheck.rows[0];
+    
+    // Validate score range if max_score is set
+    if (submission.max_score && score > submission.max_score) {
+      return res.status(400).json({
+        success: false,
+        message: `Score cannot exceed maximum score of ${submission.max_score}`
+      });
+    }
+
+    // Update the submission with score and feedback
+    const updateQuery = `
+      UPDATE submissions 
+      SET score = $1, feedback = $2, updated_at = NOW()
+      WHERE id = $3
+      RETURNING id, score, feedback, submitted_at, updated_at
+    `;
+    
+    const updatedSubmission = await pool.query(updateQuery, [score, feedback || null, submissionId]);
+
+    res.json({
+      success: true,
+      message: 'Submission graded successfully',
+      data: {
+        submission: updatedSubmission.rows[0]
+      }
+    });
+  } catch (error) {
+    console.error('Grade submission error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
 module.exports = {
   getTutors,
   getTutorById,
@@ -482,5 +553,7 @@ module.exports = {
   getTutorCourses,
   getTutorStudents,
   getTutorSubmissions,
-  getTutorDashboardStats
+  getTutorDashboardStats,
+  gradeSubmission
 };
+
